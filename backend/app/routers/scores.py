@@ -7,6 +7,7 @@ from ..models import Score, Student, SportEvent, ScoringStandard, Class, Admin, 
 from ..schemas import ScoreBatchSave, ScoreWithChange, ClearAllRequest
 from ..auth import get_current_admin, get_current_admin_flexible, get_super_admin, get_school_admin, require_school, verify_password
 from ..scoring import calculate_score, normalize_time_ms, parse_value
+from ..config import settings
 import openpyxl
 from io import BytesIO
 from datetime import date, timedelta
@@ -1172,9 +1173,10 @@ def restore_all_data(
             db.add(SystemConfig(**d))
         db.flush()
 
-        # Reset auto-increment sequences
-        for tbl in ['classes', 'sport_events', 'scoring_standards', 'students', 'scores', 'admins']:
-            db.execute(text(f"SELECT setval('{tbl}_id_seq', COALESCE((SELECT MAX(id) FROM {tbl}), 1))"))
+        # Reset auto-increment sequences (PostgreSQL only; SQLite handles it automatically)
+        if 'postgresql' in settings.database_url:
+            for tbl in ['classes', 'sport_events', 'scoring_standards', 'students', 'scores', 'admins']:
+                db.execute(text(f"SELECT setval('{tbl}_id_seq', COALESCE((SELECT MAX(id) FROM {tbl}), 1))"))
 
         db.commit()
         return {"ok": True, "classes": len(classes_data), "events": len(events_data), "standards": len(standards_data),
