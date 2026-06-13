@@ -37,9 +37,25 @@ def _pick_best_in_window(scores, days=30):
             best[key] = sc
     return best
 
-def _calc_top3_scores(student_totals: dict) -> list:
-    """每人取最高3项得分之和（中考总分），返回所有学生的总分列表"""
-    return [sum(sorted(scores, reverse=True)[:3]) for scores in student_totals.values() if scores]
+def _calc_top3_scores(student_event_scores: dict, mandatory_event_ids: set) -> list:
+    """中考总分 = 长跑(800/1000米必考)最好成绩 + 其余项目最好2项之和（满分30）。
+
+    student_event_scores: {student_id: {event_id: score}}
+    mandatory_event_ids: 必考项目 event_id 集合
+    """
+    result = []
+    for evt_scores in student_event_scores.values():
+        mandatory = []
+        other = []
+        for eid, score in evt_scores.items():
+            if eid in mandatory_event_ids:
+                mandatory.append(score)
+            else:
+                other.append(score)
+        best_mandatory = max(mandatory) if mandatory else 0
+        best2 = sum(sorted(other, reverse=True)[:2])
+        result.append(best_mandatory + best2)
+    return result
 
 def _score_distribution(totals: list, participants: int) -> dict:
     """将中考总分分档统计，返回满分率和各档位人数"""
@@ -335,14 +351,18 @@ def class_stats(
     best = _pick_best_in_window(all_scores)
 
     events = _maybe_filter(db.query(SportEvent), SportEvent, sid).order_by(SportEvent.sort_order).all()
+    # 必考项：长跑 800/1000 米（从全校全部项目中识别，不受 event_ids 筛选影响）
+    mandatory_event_ids = {e.id for e in events if '800' in e.name or '1000' in e.name}
     if event_id_list:
         events = [e for e in events if e.id in event_id_list]
 
     event_scores = defaultdict(list)
     student_totals = defaultdict(list)
+    student_event_scores = defaultdict(dict)  # {student_id: {event_id: score}}
     for (_sid, eid), sc in best.items():
         event_scores[eid].append(sc.earned_score)
         student_totals[_sid].append(sc.earned_score)
+        student_event_scores[_sid][eid] = sc.earned_score
 
     event_avgs = []
     for e in events:
@@ -357,8 +377,8 @@ def class_stats(
     excellent_count = sum(1 for t in all_scores_list if max_per_student > 0 and t / max_per_student >= 9)
     pass_count = sum(1 for t in all_scores_list if max_per_student > 0 and t / max_per_student >= 6)
 
-    # 中考总分（每人最好3项之和）
-    total_scores_3best = _calc_top3_scores(student_totals)
+    # 中考总分 = 长跑(必考)最好成绩 + 其余项目最好2项之和
+    total_scores_3best = _calc_top3_scores(student_event_scores, mandatory_event_ids)
     dist = _score_distribution(total_scores_3best, n_participants)
 
     warning_students = []
@@ -572,6 +592,8 @@ def school_stats(
     sid = _get_admin_school(current)
     event_id_list = [int(x) for x in event_ids.split(",")] if event_ids else None
     events = _maybe_filter(db.query(SportEvent), SportEvent, sid).order_by(SportEvent.sort_order).all()
+    # 必考项：长跑 800/1000 米（从全校全部项目中识别）
+    mandatory_event_ids = {e.id for e in events if '800' in e.name or '1000' in e.name}
     if event_id_list:
         events = [e for e in events if e.id in event_id_list]
 
@@ -583,10 +605,12 @@ def school_stats(
 
     event_scores = defaultdict(list)
     student_totals = defaultdict(list)
+    student_event_scores = defaultdict(dict)
     for (_sid, eid), sc in best.items():
         if eid in [e.id for e in events]:
             event_scores[eid].append(sc.earned_score)
             student_totals[_sid].append(sc.earned_score)
+            student_event_scores[_sid][eid] = sc.earned_score
 
     event_avgs = []
     for e in events:
@@ -601,8 +625,8 @@ def school_stats(
     excellent_count = sum(1 for t in all_scores_list if max_per_student > 0 and t / max_per_student >= 9)
     pass_count = sum(1 for t in all_scores_list if max_per_student > 0 and t / max_per_student >= 6)
 
-    # 中考总分（每人最好3项之和）
-    total_scores_3best = _calc_top3_scores(student_totals)
+    # 中考总分 = 长跑(必考)最好成绩 + 其余项目最好2项之和
+    total_scores_3best = _calc_top3_scores(student_event_scores, mandatory_event_ids)
     dist = _score_distribution(total_scores_3best, n_participants)
 
     classes = _maybe_filter(db.query(Class), Class, sid).order_by(Class.grade, Class.name).all()
@@ -671,6 +695,8 @@ def grade_stats(
     sid = _get_admin_school(current)
     event_id_list = [int(x) for x in event_ids.split(",")] if event_ids else None
     events = _maybe_filter(db.query(SportEvent), SportEvent, sid).order_by(SportEvent.sort_order).all()
+    # 必考项：长跑 800/1000 米（从全校全部项目中识别）
+    mandatory_event_ids = {e.id for e in events if '800' in e.name or '1000' in e.name}
     if event_id_list:
         events = [e for e in events if e.id in event_id_list]
 
@@ -696,10 +722,12 @@ def grade_stats(
 
         event_scores = defaultdict(list)
         student_totals = defaultdict(list)
+        student_event_scores = defaultdict(dict)
         for (st_id, eid), sc in best.items():
             if st_id in grade_student_ids and eid in [e.id for e in events]:
                 event_scores[eid].append(sc.earned_score)
                 student_totals[st_id].append(sc.earned_score)
+                student_event_scores[st_id][eid] = sc.earned_score
 
         event_avgs = []
         for e in events:
@@ -714,8 +742,8 @@ def grade_stats(
         excellent_count = sum(1 for t in all_scores_for_grade if max_per_student > 0 and t / max_per_student >= 9)
         pass_count = sum(1 for t in all_scores_for_grade if max_per_student > 0 and t / max_per_student >= 6)
 
-        # 中考总分（每人最好3项之和）
-        total_scores_3best = _calc_top3_scores(student_totals)
+        # 中考总分 = 长跑(必考)最好成绩 + 其余项目最好2项之和
+        total_scores_3best = _calc_top3_scores(student_event_scores, mandatory_event_ids)
         dist = _score_distribution(total_scores_3best, n_participants)
 
         class_summaries = []

@@ -10,7 +10,7 @@
         </el-select>
         <el-button type="primary" size="small" @click="showExport = true" style="margin-bottom:12px">导出全校成绩</el-button>
 
-        <el-text size="small" type="info" style="margin-bottom:8px;display:block">📅 统计口径：近30天各项目最好成绩 &nbsp;|&nbsp; 🎯 中考总分=每人最好3项之和（满分30）</el-text>
+        <el-text size="small" type="info" style="margin-bottom:8px;display:block">📅 近30天各项目最好成绩 &nbsp;|&nbsp; 🎯 中考总分=长跑(必考)+其余最好2项（满分30）</el-text>
 
         <el-row :gutter="8" v-if="schoolStats">
           <el-col :span="6" class="stat-col"><el-card><template #header>总人数</template><h2>{{ schoolStats.total_students }}<span style="font-size:11px;color:#999;font-weight:normal"> / 参与{{ schoolStats.participants }}</span></h2></el-card></el-col>
@@ -59,7 +59,7 @@
 
       <!-- 年级统计 -->
       <el-tab-pane label="年级统计" name="grade">
-        <el-text size="small" type="info" style="margin-bottom:8px;display:block">📅 统计口径：近30天各项目最好成绩 &nbsp;|&nbsp; 🎯 中考总分=每人最好3项之和（满分30）</el-text>
+        <el-text size="small" type="info" style="margin-bottom:8px;display:block">📅 近30天各项目最好成绩 &nbsp;|&nbsp; 🎯 中考总分=长跑(必考)+其余最好2项（满分30）</el-text>
         <el-select v-model="gradeFilter" placeholder="选择年级" @change="loadGradeStats" style="width:100%;margin-bottom:8px" size="default" clearable>
           <el-option v-for="g in gradeOptions" :key="g" :label="g" :value="g" />
         </el-select>
