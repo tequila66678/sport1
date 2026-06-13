@@ -1083,15 +1083,16 @@ def restore_all_data(
     except Exception:
         raise HTTPException(400, "无法读取文件，请确认是备份Excel文件")
 
-    def get_sheet(name):
-        if name in wb.sheetnames:
-            return list(wb[name].iter_rows(min_row=2, values_only=True))
+    # Read sheets by index (order is fixed regardless of encoding)
+    def get_sheet_data(idx):
+        if idx < len(wb.sheetnames):
+            return list(wb[wb.sheetnames[idx]].iter_rows(min_row=2, values_only=True))
         return []
 
-    # Read all sheets
-    classes_data = [{"id": int(r[0]), "grade": str(r[1]), "name": str(r[2]), "school_id": int(r[3]) if len(r) > 3 and r[3] else sid} for r in get_sheet("班级信息") if r[0] is not None]
+    # Sheet order: 0=班级信息, 1=体育项目, 2=评分标准, 3=学生信息, 4=成绩记录, 5=管理员, 6=系统设置
+    classes_data = [{"id": int(r[0]), "grade": str(r[1]), "name": str(r[2]), "school_id": int(r[3]) if len(r) > 3 and r[3] else sid} for r in get_sheet_data(0) if r[0] is not None]
     events_data = []
-    for r in get_sheet("体育项目"):
+    for r in get_sheet_data(1):
         if r[0] is not None:
             events_data.append({
                 "id": int(r[0]), "name": str(r[1]), "gender": Gender(str(r[2])) if r[2] else Gender.both,
@@ -1100,7 +1101,7 @@ def restore_all_data(
                 "sort_order": int(r[6] or 0), "school_id": int(r[7]) if len(r) > 7 and r[7] else sid
             })
     standards_data = []
-    for r in get_sheet("评分标准"):
+    for r in get_sheet_data(2):
         if r[0] is not None:
             standards_data.append({
                 "id": int(r[0]), "event_id": int(r[1]),
@@ -1108,7 +1109,7 @@ def restore_all_data(
                 "score": int(r[3]), "standard_value": str(r[4])
             })
     students_data = []
-    for r in get_sheet("学生信息"):
+    for r in get_sheet_data(3):
         if r[0] is not None:
             students_data.append({
                 "id": int(r[0]), "student_id": str(r[1]), "name": str(r[2]),
@@ -1116,7 +1117,7 @@ def restore_all_data(
                 "password_hash": str(r[5]) if len(r) > 5 and r[5] else ""
             })
     scores_data = []
-    for r in get_sheet("成绩记录"):
+    for r in get_sheet_data(4):
         if r[0] is not None:
             scores_data.append({
                 "id": int(r[0]), "student_id": int(r[1]), "event_id": int(r[2]),
@@ -1126,7 +1127,7 @@ def restore_all_data(
                 "school_id": int(r[7]) if len(r) > 7 and r[7] else sid
             })
     admins_data = []
-    for r in get_sheet("管理员"):
+    for r in get_sheet_data(5):
         if r[0] is not None:
             admins_data.append({
                 "id": int(r[0]), "username": str(r[1]), "password_hash": str(r[2]),
@@ -1134,7 +1135,7 @@ def restore_all_data(
                 "school_id": int(r[5]) if len(r) > 5 and r[5] else None
             })
     configs_data = []
-    for r in get_sheet("系统设置"):
+    for r in get_sheet_data(6):
         if r[0] is not None:
             configs_data.append({
                 "key": str(r[0]), "value": str(r[1]),
