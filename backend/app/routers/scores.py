@@ -38,6 +38,19 @@ def _pick_best_in_window(scores, days=30):
             best[key] = sc
     return best
 
+def _pick_best_in_window_as_of(scores, as_of_date: date, days=30):
+    """Same as _pick_best_in_window but uses a custom reference date (for trend calculation)."""
+    cutoff = as_of_date - timedelta(days=days)
+    best = {}
+    for sc in scores:
+        if sc.test_date < cutoff or sc.test_date > as_of_date:
+            continue
+        key = (sc.student_id, sc.event_id)
+        if key not in best or sc.earned_score > best[key].earned_score:
+            best[key] = sc
+    return best
+
+
 def _calc_top3_scores(student_event_scores: dict, mandatory_event_ids: set) -> list:
     """中考总分 = 长跑(800/1000米必考)最好成绩 + 其余项目最好2项之和（满分30）。
 
@@ -381,6 +394,10 @@ def class_stats(
     # 中考总分 = 长跑(必考)最好成绩 + 其余项目最好2项之和
     total_scores_3best = _calc_top3_scores(student_event_scores, mandatory_event_ids)
     dist = _score_distribution(total_scores_3best, n_participants)
+    predicted_avg_score = round(sum(total_scores_3best) / len(total_scores_3best), 1) if total_scores_3best else 0
+
+    # Risk events for this class
+    risk_events = sorted(event_avgs, key=lambda x: x["avg_score"])[:5]
 
     warning_students = []
     for s in students:
@@ -410,11 +427,13 @@ def class_stats(
         "total_students": len(students),
         "participants": n_participants,
         "avg_score": round(overall_avg, 1),
+        "predicted_avg_score": predicted_avg_score,
         "excellent_rate": round(excellent_count / n_participants * 100, 1) if n_participants else 0,
         "pass_rate": round(pass_count / n_participants * 100, 1) if n_participants else 0,
         "full_score_rate": dist["full_score_rate"],
         "score_distribution": dist["buckets"],
         "event_avgs": event_avgs,
+        "risk_events": risk_events,
         "warning_students": warning_students
     }
 
@@ -629,6 +648,10 @@ def school_stats(
     # 中考总分 = 长跑(必考)最好成绩 + 其余项目最好2项之和
     total_scores_3best = _calc_top3_scores(student_event_scores, mandatory_event_ids)
     dist = _score_distribution(total_scores_3best, n_participants)
+    predicted_avg_score = round(sum(total_scores_3best) / len(total_scores_3best), 1) if total_scores_3best else 0
+
+    # Risk events: lowest avg_score first
+    risk_events = sorted(event_avgs, key=lambda x: x["avg_score"])[:5]
 
     classes = _maybe_filter(db.query(Class), Class, sid).order_by(Class.grade, Class.name).all()
     # Build student-id -> class lookup for warning
@@ -651,6 +674,20 @@ def school_stats(
             "students": len(cls_students), "participants": cls_count,
             "avg_score": round(cls_avg, 1)
         })
+
+    # Risk classes: class-level 中考总分 averages, lowest first
+    risk_classes = []
+    for cls in classes:
+        cls_student_ids = {s.id for s in all_students if s.class_id == cls.id}
+        cls_event_scores = {sid: evt for sid, evt in student_event_scores.items() if sid in cls_student_ids}
+        cls_total_scores = _calc_top3_scores(cls_event_scores, mandatory_event_ids)
+        if cls_total_scores:
+            risk_classes.append({
+                "class_id": cls.id, "class_name": f"{cls.grade}{cls.name}",
+                "predicted_avg_score": round(sum(cls_total_scores) / len(cls_total_scores), 1),
+                "participants": len(cls_total_scores)
+            })
+    risk_classes.sort(key=lambda x: x["predicted_avg_score"])
 
     warning_students = []
     for s in all_students:
@@ -675,12 +712,15 @@ def school_stats(
         "total_classes": len(class_summaries),
         "participants": n_participants,
         "avg_score": round(overall_avg, 1),
+        "predicted_avg_score": predicted_avg_score,
         "excellent_rate": round(excellent_count / n_participants * 100, 1) if n_participants else 0,
         "pass_rate": round(pass_count / n_participants * 100, 1) if n_participants else 0,
         "full_score_rate": dist["full_score_rate"],
         "score_distribution": dist["buckets"],
         "event_avgs": event_avgs,
         "class_summaries": class_summaries,
+        "risk_events": risk_events,
+        "risk_classes": risk_classes[:5],
         "warning_students": warning_students
     }
 
@@ -746,6 +786,10 @@ def grade_stats(
         # 中考总分 = 长跑(必考)最好成绩 + 其余项目最好2项之和
         total_scores_3best = _calc_top3_scores(student_event_scores, mandatory_event_ids)
         dist = _score_distribution(total_scores_3best, n_participants)
+        predicted_avg_score = round(sum(total_scores_3best) / len(total_scores_3best), 1) if total_scores_3best else 0
+
+        # Risk events for this grade
+        risk_events = sorted(event_avgs, key=lambda x: x["avg_score"])[:5]
 
         class_summaries = []
         for cls in classes_in_grade:
@@ -762,6 +806,20 @@ def grade_stats(
                 "students": len(cls_students), "participants": cls_count,
                 "avg_score": round(cls_avg, 1)
             })
+
+        # Risk classes for this grade: class-level 中考总分 averages, lowest first
+        risk_classes = []
+        for cls in classes_in_grade:
+            cls_student_ids = {s.id for s in grade_students if s.class_id == cls.id}
+            cls_event_scores = {sid: evt for sid, evt in student_event_scores.items() if sid in cls_student_ids}
+            cls_total_scores = _calc_top3_scores(cls_event_scores, mandatory_event_ids)
+            if cls_total_scores:
+                risk_classes.append({
+                    "class_id": cls.id, "class_name": f"{cls.grade}{cls.name}",
+                    "predicted_avg_score": round(sum(cls_total_scores) / len(cls_total_scores), 1),
+                    "participants": len(cls_total_scores)
+                })
+        risk_classes.sort(key=lambda x: x["predicted_avg_score"])
 
         warning_students = []
         for s in grade_students:
@@ -792,16 +850,76 @@ def grade_stats(
             "total_classes": len(classes_in_grade),
             "participants": n_participants,
             "avg_score": round(overall_avg, 1),
+            "predicted_avg_score": predicted_avg_score,
             "excellent_rate": round(excellent_count / n_participants * 100, 1) if n_participants else 0,
             "pass_rate": round(pass_count / n_participants * 100, 1) if n_participants else 0,
             "full_score_rate": dist["full_score_rate"],
             "score_distribution": dist["buckets"],
             "event_avgs": event_avgs,
             "class_summaries": class_summaries,
+            "risk_events": risk_events,
+            "risk_classes": risk_classes[:5],
             "warning_students": warning_students
         })
 
     return result
+
+
+@router.get("/trends")
+def score_trends(
+    db: Session = Depends(get_db),
+    current: Admin = Depends(get_current_admin)
+):
+    """Monthly trend data for the last 6 months: predicted_avg_score + full_score_rate."""
+    sid = _get_admin_school(current)
+    today = date.today()
+
+    events = _maybe_filter(db.query(SportEvent), SportEvent, sid).order_by(SportEvent.sort_order).all()
+    mandatory_event_ids = {e.id for e in events if '800' in e.name or '1000' in e.name}
+    event_ids = [e.id for e in events]
+
+    all_scores = _maybe_filter(db.query(Score), Score, sid).order_by(Score.test_date.desc()).all()
+
+    # Build month list (last 6 months)
+    months = []
+    for i in range(5, -1, -1):
+        y, m = today.year, today.month - i
+        while m <= 0:
+            m += 12
+            y -= 1
+        # End of month (or today for current month)
+        if m == 12:
+            month_end = date(y, 12, 31)
+        else:
+            month_end = date(y, m + 1, 1) - timedelta(days=1)
+        if i == 0:  # current month: use today
+            month_end = today
+        months.append(month_end)
+
+    trends = []
+    for month_end in months:
+        # Best scores as of month_end (within 30 days)
+        best = _pick_best_in_window_as_of(all_scores, month_end)
+
+        student_event_scores = defaultdict(dict)
+        for (st_id, eid), sc in best.items():
+            if eid in event_ids:
+                student_event_scores[st_id][eid] = sc.earned_score
+
+        total_scores_3best = _calc_top3_scores(student_event_scores, mandatory_event_ids)
+        n = len(total_scores_3best)
+
+        avg_score = round(sum(total_scores_3best) / n, 1) if n else 0
+        full_score_count = sum(1 for t in total_scores_3best if t >= 30)
+        full_score_rate = round(full_score_count / n * 100, 1) if n else 0
+
+        trends.append({
+            "month": month_end.strftime("%Y-%m"),
+            "predicted_avg_score": avg_score,
+            "full_score_rate": full_score_rate
+        })
+
+    return trends
 
 
 @router.post("/export/preview")
