@@ -667,10 +667,11 @@ def export_student_scores(
 @router.get("/school-stats")
 def school_stats(
     event_ids: Optional[str] = Query(None),
+    grade: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current: Admin = Depends(get_current_admin)
 ):
-    """School-wide statistics."""
+    """School-wide statistics. Optional grade filter (e.g. '2027届')."""
     sid = _get_admin_school(current)
     event_id_list = [int(x) for x in event_ids.split(",")] if event_ids else None
     events = _maybe_filter(db.query(SportEvent), SportEvent, sid).order_by(SportEvent.sort_order).all()
@@ -679,8 +680,21 @@ def school_stats(
     if event_id_list:
         events = [e for e in events if e.id in event_id_list]
 
-    all_students = _maybe_filter(db.query(Student).join(Class), Class, sid).all()
-    all_scores = _maybe_filter(db.query(Score), Score, sid).order_by(Score.test_date.desc()).all()
+    # Base queries with optional grade filter
+    student_q = _maybe_filter(db.query(Student).join(Class), Class, sid)
+    class_q = _maybe_filter(db.query(Class), Class, sid)
+    if grade:
+        student_q = student_q.filter(Class.grade == grade)
+        class_q = class_q.filter(Class.grade == grade)
+
+    all_students = student_q.all()
+    classes = class_q.order_by(Class.grade, Class.name).all()
+    # Scores: filter by school, and by grade-filtered students if grade is set
+    score_q = _maybe_filter(db.query(Score), Score, sid)
+    if grade:
+        grade_student_ids = [s.id for s in all_students]
+        score_q = score_q.filter(Score.student_id.in_(grade_student_ids))
+    all_scores = score_q.order_by(Score.test_date.desc()).all()
 
     # Training count this month
     today = date.today()
@@ -720,7 +734,6 @@ def school_stats(
     # Risk events: lowest avg_score first
     risk_events = sorted(event_avgs, key=lambda x: x["avg_score"])[:5]
 
-    classes = _maybe_filter(db.query(Class), Class, sid).order_by(Class.grade, Class.name).all()
     # Build student-id -> class lookup for warning
     student_class_map = {}
     for s in all_students:
@@ -935,6 +948,7 @@ def grade_stats(
 
 @router.get("/trends")
 def score_trends(
+    grade: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current: Admin = Depends(get_current_admin)
 ):
@@ -946,7 +960,11 @@ def score_trends(
     mandatory_event_ids = {e.id for e in events if '800' in e.name or '1000' in e.name}
     event_ids = [e.id for e in events]
 
-    all_scores = _maybe_filter(db.query(Score), Score, sid).order_by(Score.test_date.desc()).all()
+    score_q = _maybe_filter(db.query(Score), Score, sid)
+    if grade:
+        grade_student_ids = [s.id for s in _maybe_filter(db.query(Student).join(Class), Class, sid).filter(Class.grade == grade).all()]
+        score_q = score_q.filter(Score.student_id.in_(grade_student_ids))
+    all_scores = score_q.order_by(Score.test_date.desc()).all()
 
     # Build month list (last 6 months)
     months = []
