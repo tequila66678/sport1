@@ -13,7 +13,7 @@
         @select="mobileOpen = false"
       >
         <el-menu-item index="/admin/dashboard">
-          <el-icon><DataAnalysis /></el-icon> 仪表盘
+          <el-icon><DataAnalysis /></el-icon> 驾驶舱
         </el-menu-item>
         <el-menu-item index="/admin/score-entry">
           <el-icon><EditPen /></el-icon> 成绩录入

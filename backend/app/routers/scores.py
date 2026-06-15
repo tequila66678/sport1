@@ -682,6 +682,11 @@ def school_stats(
     all_students = _maybe_filter(db.query(Student).join(Class), Class, sid).all()
     all_scores = _maybe_filter(db.query(Score), Score, sid).order_by(Score.test_date.desc()).all()
 
+    # Training count this month
+    today = date.today()
+    month_start = date(today.year, today.month, 1)
+    training_count_this_month = sum(1 for sc in all_scores if sc.test_date and sc.test_date >= month_start)
+
     # Best score per student per event within last 30 days
     best = _pick_best_in_window(all_scores)
 
@@ -781,6 +786,7 @@ def school_stats(
         "score_distribution": dist["buckets"],
         "event_avgs": event_avgs,
         "class_summaries": class_summaries,
+        "training_count_this_month": training_count_this_month,
         "risk_events": risk_events,
         "risk_classes": risk_classes[:5],
         "warning_students": warning_students
