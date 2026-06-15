@@ -437,6 +437,68 @@ def class_stats(
         "warning_students": warning_students
     }
 
+@router.get("/class-score-table")
+def class_score_table(
+    class_id: int = Query(...),
+    db: Session = Depends(get_db),
+    current: Admin = Depends(get_current_admin)
+):
+    """Per-student per-event score matrix for a class.
+    Each cell = best score in last 30 days, falling back to most recent if none in 30 days.
+    """
+    sid = _get_admin_school(current)
+    cls = _maybe_filter(db.query(Class), Class, sid).filter(Class.id == class_id).first()
+    if not cls:
+        raise HTTPException(404, "班级不存在")
+
+    students = db.query(Student).filter(Student.class_id == class_id).order_by(Student.student_id).all()
+    events = _maybe_filter(db.query(SportEvent), SportEvent, sid).order_by(SportEvent.sort_order).all()
+
+    # Load all scores for these students
+    student_ids = [s.id for s in students]
+    all_scores = db.query(Score).filter(Score.student_id.in_(student_ids)).order_by(Score.test_date.desc()).all()
+
+    # Best in 30 days (global, shared logic)
+    best_30d = _pick_best_in_window(all_scores)
+
+    # Group scores by (student_id, event_id)
+    from collections import defaultdict as _dd
+    score_map = _dd(list)
+    for sc in all_scores:
+        score_map[(sc.student_id, sc.event_id)].append(sc)
+
+    # Build matrix
+    event_list = [{"id": e.id, "name": e.name} for e in events]
+    rows = []
+    for s in students:
+        row = {
+            "student_id": s.student_id,
+            "student_name": s.name,
+            "gender": s.gender.value,
+            "scores": {}
+        }
+        for e in events:
+            key = (s.id, e.id)
+            # Priority: best in 30 days, else most recent
+            best = best_30d.get(key)
+            if best:
+                row["scores"][str(e.id)] = {
+                    "earned_score": best.earned_score,
+                    "raw_value": best.raw_value,
+                    "test_date": best.test_date.isoformat()
+                }
+            elif key in score_map:
+                recent = score_map[key][0]  # most recent (sorted desc)
+                row["scores"][str(e.id)] = {
+                    "earned_score": recent.earned_score,
+                    "raw_value": recent.raw_value,
+                    "test_date": recent.test_date.isoformat()
+                }
+        rows.append(row)
+
+    return {"events": event_list, "students": rows}
+
+
 @router.get("/student-stats/{student_id}")
 def student_stats(
     student_id: int,

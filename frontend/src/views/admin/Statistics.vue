@@ -231,6 +231,24 @@
               </div>
             </div>
           </div>
+
+          <!-- Student score matrix table -->
+          <div v-if="classScoreTable" class="section-label" style="margin-top:16px">学生成绩明细</div>
+          <div v-if="classScoreTable" class="score-table-wrap">
+            <el-table :data="classScoreTable.students" stripe size="small" style="width:100%" border>
+              <el-table-column prop="student_id" label="学号" width="100" fixed />
+              <el-table-column prop="student_name" label="姓名" width="80" fixed />
+              <el-table-column v-for="evt in classScoreTable.events" :key="evt.id" :label="evt.name" min-width="100" align="center">
+                <template #default="{ row }">
+                  <span v-if="row.scores[evt.id]" class="cell-score" :class="{ 'cell-best': row.scores[evt.id]?.earned_score >= 9 }">
+                    {{ row.scores[evt.id]?.earned_score ?? '-' }}
+                  </span>
+                  <span v-else class="cell-empty">-</span>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div class="table-hint">* 优先取近30天该项目最好成绩，若30天内未测试则取最近一次成绩</div>
+          </div>
         </div>
         <div v-else class="empty-hint">请选择班级</div>
       </el-tab-pane>
@@ -312,6 +330,7 @@ const gradeOptions = computed(() => [...new Set(classes.value.map(c => c.grade))
 const statsClassId = ref(null)
 const statsEventIds = ref([])
 const classStats = ref(null)
+const classScoreTable = ref(null)
 
 // Student stats
 const studentSearch = ref('')
@@ -354,11 +373,15 @@ async function loadGradeStats() {
 }
 
 async function loadClassStats() {
-  if (!statsClassId.value) return
+  if (!statsClassId.value) { classStats.value = null; classScoreTable.value = null; return }
   const params = { class_id: statsClassId.value }
   if (statsEventIds.value.length) params.event_ids = statsEventIds.value.join(',')
-  const res = await api.get('/scores/class-stats', { params })
-  classStats.value = res.data
+  const [statsRes, tableRes] = await Promise.all([
+    api.get('/scores/class-stats', { params }),
+    api.get('/scores/class-score-table', { params: { class_id: statsClassId.value } })
+  ])
+  classStats.value = statsRes.data
+  classScoreTable.value = tableRes.data
 }
 
 async function searchStudent() {
@@ -662,6 +685,16 @@ const chartOption = computed(() => {
 
 /* Empty state */
 .empty-hint { text-align: center; color: #a3a3a3; padding: 32px; font-size: 13px; }
+
+/* Score table */
+.score-table-wrap { background: #fff; border: 1px solid #e8e6e1; border-radius: 14px; overflow: hidden; }
+.score-table-wrap :deep(.el-table) { font-size: 12px; }
+.score-table-wrap :deep(.el-table th) { background: #fafaf9; color: #525252; font-weight: 600; font-size: 11px; padding: 10px 8px; }
+.score-table-wrap :deep(.el-table td) { padding: 8px; }
+.cell-score { font-weight: 600; color: #171717; }
+.cell-best { color: #059669; font-weight: 700; }
+.cell-empty { color: #d4d4d4; }
+.table-hint { padding: 8px 16px; font-size: 11px; color: #a3a3a3; background: #fafaf9; }
 
 /* Override element-plus card headers to be cleaner */
 :deep(.el-card__header) { padding: 10px 16px; font-size: 13px; font-weight: 600; }
