@@ -42,7 +42,7 @@
 
         <el-dialog v-model="showStandards" title="编辑评分标准" width="90%">
           <div v-for="i in 10" :key="i" style="display:flex;align-items:center;margin-bottom:8px">
-            <span style="width:40px;font-size:13px">{{ 11 - i }}分</span>
+            <span style="width:40px;font-size:13px;color:var(--text-b)">{{ 11 - i }}分</span>
             <el-input v-model="standardsForm[i - 1]" style="flex:1" size="small" />
           </div>
           <el-button type="primary" @click="saveStandards" style="width:100%">保存</el-button>
@@ -340,8 +340,47 @@ async function clearScores() {
 </script>
 
 <style scoped>
-.back-btn { margin-bottom: 4px; font-size: 13px; }
-.event-card, .admin-card { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: white; border-radius: 8px; margin-bottom: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-.ec-name, .ad-name { font-size: 14px; font-weight: bold; }
-.ec-meta, .ad-role { font-size: 11px; color: #999; }
+/* ===== Dark Cockpit Container ===== */
+.settings-page {
+  --bg-root: #0c1929; --bg-card: #132238; --bg-hover: #1a2f4a;
+  --cyan: #06b6d4; --amber: #f59e0b; --emerald: #10b981; --red: #ef4444;
+  --text-a: #f1f5f9; --text-b: #94a3b8; --text-c: #64748b;
+  --border: #1e3a5f; --border-sub: #162942;
+  background: var(--bg-root); margin: -12px; padding: 20px 24px 40px;
+  min-height: calc(100vh - 50px); position: relative;
+}
+.settings-page::before {
+  content: ''; position: absolute; inset: 0;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none; z-index: 0;
+}
+.settings-page > * { position: relative; z-index: 1; }
+
+.back-btn { margin-bottom: 4px; font-size: 13px; color: var(--text-b); }
+h3, h4 { color: var(--text-a); }
+
+/* ===== Element Plus overrides ===== */
+.settings-page :deep(.el-tabs__header) { border-bottom-color: var(--border-sub); }
+.settings-page :deep(.el-tabs__item) { color: var(--text-b); }
+.settings-page :deep(.el-tabs__item.is-active) { color: var(--cyan); }
+.settings-page :deep(.el-tabs__active-bar) { background: var(--cyan); }
+.settings-page :deep(.el-input__inner) { background: #0f1e35; border-color: var(--border); color: var(--text-a); }
+.settings-page :deep(.el-select .el-input__inner) { background: #0f1e35; border-color: var(--border); color: var(--text-a); }
+.settings-page :deep(.el-input-number .el-input__inner) { background: #0f1e35; border-color: var(--border); color: var(--text-a); }
+.settings-page :deep(.el-button--default) { background: transparent; border-color: var(--border); color: var(--text-b); }
+.settings-page :deep(.el-button--default:hover) { border-color: var(--cyan); color: var(--cyan); }
+.settings-page :deep(.el-dialog) { background: var(--bg-card); border: 1px solid var(--border); }
+.settings-page :deep(.el-dialog__title) { color: var(--text-a); }
+.settings-page :deep(.el-dialog__body) { color: var(--text-a); }
+.settings-page :deep(.el-form-item__label) { color: var(--text-b); }
+.settings-page :deep(.el-divider) { border-color: var(--border-sub); }
+
+/* Cards */
+.event-card, .admin-card {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border-sub);
+  border-radius: 10px; margin-bottom: 6px;
+}
+.ec-name, .ad-name { font-size: 14px; font-weight: bold; color: var(--text-a); }
+.ec-meta, .ad-role { font-size: 11px; color: var(--text-c); }
 </style>
