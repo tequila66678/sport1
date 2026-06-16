@@ -3,121 +3,6 @@
     <el-button text @click="$router.push('/admin/dashboard')" class="back-btn">← 返回仪表盘</el-button>
     <h3 style="margin:8px 0 12px">统计分析</h3>
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
-      <!-- ============================================
-           TAB: 全校总览
-           ============================================ -->
-      <el-tab-pane label="全校总览" name="school">
-        <el-select v-model="schoolEventIds" multiple placeholder="选择项目（可选）" @change="loadSchoolStats" style="width:100%;margin-bottom:8px" size="default" collapse-tags>
-          <el-option v-for="e in events" :key="e.id" :label="e.name" :value="e.id" />
-        </el-select>
-        <div style="display:flex;gap:8px;margin-bottom:12px">
-          <el-button type="primary" size="small" @click="showExport = true">导出全校成绩</el-button>
-        </div>
-
-        <div class="ctx-note">
-          <span class="ctx-dot"></span> 近30天各项目最好成绩 · 中考总分 = 长跑(必考) + 其余最好2项（满分30）
-        </div>
-
-        <!-- KPI Row -->
-        <div class="section-label">核心指标</div>
-        <div class="kpi-grid" v-if="schoolStats">
-          <div class="kpi-card indigo">
-            <div class="kpi-label">预测中考均分</div>
-            <div class="kpi-value-row">
-              <span class="kpi-value">{{ schoolStats.predicted_avg_score ?? '--' }}</span>
-              <span class="kpi-unit">/ 30 分</span>
-            </div>
-            <div class="kpi-sub">基于近30天长跑+最优2项计算</div>
-          </div>
-          <div class="kpi-card gold">
-            <div class="kpi-label">🏆 预计中考满分率</div>
-            <div class="kpi-value-row">
-              <span class="kpi-value">{{ schoolStats.full_score_rate ?? '--' }}</span>
-              <span class="kpi-unit">%</span>
-            </div>
-            <div class="kpi-sub">{{ schoolStats.score_distribution?.[0]?.count ?? 0 }} / {{ schoolStats.participants }} 人满分</div>
-          </div>
-          <div class="kpi-card amber">
-            <div class="kpi-label">⚠ 下滑风险学生</div>
-            <div class="kpi-value-row">
-              <span class="kpi-value">{{ schoolStats.warning_students?.length ?? 0 }}</span>
-              <span class="kpi-unit">人</span>
-            </div>
-            <div class="kpi-sub">占比 {{ schoolStats.participants ? (schoolStats.warning_students?.length / schoolStats.participants * 100).toFixed(1) : 0 }}%</div>
-          </div>
-        </div>
-
-        <!-- Trend Charts -->
-        <div class="section-label">趋势分析</div>
-        <div class="trend-grid">
-          <div class="chart-card">
-            <div class="chart-title">预测中考均分趋势 <span class="chart-subtitle">近6个月</span></div>
-            <v-chart v-if="avgTrendChart" :option="avgTrendChart" style="height:240px" autoresize />
-          </div>
-          <div class="chart-card">
-            <div class="chart-title">预计中考满分率趋势 <span class="chart-subtitle">近6个月</span></div>
-            <v-chart v-if="fullScoreTrendChart" :option="fullScoreTrendChart" style="height:240px" autoresize />
-          </div>
-        </div>
-
-        <!-- Risk Area -->
-        <div class="section-label">风险聚焦</div>
-        <div class="risk-grid">
-          <div class="risk-card">
-            <div class="risk-hd">风险项目（均分最低）<span class="risk-badge red">需关注</span></div>
-            <div class="risk-list">
-              <div class="risk-row" v-for="(e, i) in schoolStats.risk_events" :key="e.event_id">
-                <span :class="['risk-rank', { top3: i < 3 }]">{{ i + 1 }}</span>
-                <div class="risk-info">
-                  <div class="risk-name">{{ e.event_name }}</div>
-                  <div class="risk-meta">{{ e.count }}人参与</div>
-                </div>
-                <div class="risk-bar-wrap"><div :class="['risk-bar-fill', e.avg_score < 6 ? 'low' : 'mid']" :style="{ width: e.avg_score * 10 + '%' }"></div></div>
-                <span :class="['risk-value', e.avg_score < 6 ? 'low' : 'mid']">{{ e.avg_score }}</span>
-              </div>
-              <div v-if="!schoolStats.risk_events?.length" class="empty-hint">暂无数据</div>
-            </div>
-          </div>
-
-          <div class="risk-card">
-            <div class="risk-hd">风险班级（中考均分最低）<span class="risk-badge amber-bg">需关注</span></div>
-            <div class="risk-list">
-              <div class="risk-row" v-for="(c, i) in schoolStats.risk_classes" :key="c.class_id">
-                <span :class="['risk-rank', { top3: i < 3 }]">{{ i + 1 }}</span>
-                <div class="risk-info">
-                  <div class="risk-name">{{ c.class_name }}</div>
-                  <div class="risk-meta">{{ c.participants }}人参与</div>
-                </div>
-                <div class="risk-bar-wrap"><div :class="['risk-bar-fill', c.predicted_avg_score < 18 ? 'low' : 'mid']" :style="{ width: c.predicted_avg_score / 30 * 100 + '%' }"></div></div>
-                <span :class="['risk-value', c.predicted_avg_score < 18 ? 'low' : 'mid']">{{ c.predicted_avg_score }}</span>
-              </div>
-              <div v-if="!schoolStats.risk_classes?.length" class="empty-hint">暂无数据</div>
-            </div>
-          </div>
-
-          <!-- Warning students -->
-          <div class="risk-card" style="grid-column: 1 / -1;">
-            <div class="risk-hd">
-              下滑风险学生（近两次成绩对比）
-              <span class="risk-badge amber-bg">{{ schoolStats.warning_students?.length || 0 }}人下滑 &gt;2分</span>
-            </div>
-            <div class="student-risk-grid" v-if="schoolStats.warning_students?.length">
-              <div class="student-risk-row" v-for="w in schoolStats.warning_students" :key="w.student_no">
-                <div :class="['student-avatar-sm', w.student_gender === 'M' ? 'male' : 'female']">{{ w.student_name[0] }}</div>
-                <div class="risk-info">
-                  <div class="risk-name">{{ w.student_name }} <span class="risk-meta-inline">{{ w.student_gender === 'M' ? '男' : '女' }} · {{ w.class_name }}</span></div>
-                  <div class="risk-meta">{{ w.event_name }}：{{ w.prev_score }} → <span class="score-drop">{{ w.curr_score }}</span>（{{ (w.curr_score - w.prev_score).toFixed(1) }}）</div>
-                </div>
-              </div>
-            </div>
-            <div v-else class="empty-hint" style="padding:16px 22px">暂无下滑风险学生</div>
-          </div>
-        </div>
-      </el-tab-pane>
-
-      <!-- ============================================
-           TAB: 年级对比
-           ============================================ -->
       <el-tab-pane label="年级对比" name="grade">
         <div class="ctx-note"><span class="ctx-dot"></span> 近30天各项目最好成绩 · 中考总分 = 长跑(必考) + 其余最好2项</div>
         <el-select v-model="gradeEventIds" multiple placeholder="选择项目（可选）" @change="loadGradeStats" style="width:100%;margin-bottom:12px" size="default" collapse-tags>
@@ -311,15 +196,12 @@ import ExportDialog from '../../components/ExportDialog.vue'
 import VChart from 'vue-echarts'
 import 'echarts'
 
-const activeTab = ref('school')
+const activeTab = ref('grade')
 const classes = ref([])
 const events = ref([])
 const showExport = ref(false)
 
 // School stats
-const schoolEventIds = ref([])
-const schoolStats = ref(null)
-const trendData = ref(null)
 
 // Grade stats
 const gradeEventIds = ref([])
@@ -342,27 +224,10 @@ onMounted(async () => {
   const [cRes, eRes] = await Promise.all([api.get('/events/classes'), api.get('/events')])
   classes.value = cRes.data.map(c => ({ ...c, label: `${c.grade}${c.name}` }))
   events.value = eRes.data
-  loadSchoolStats()
-  loadTrends()
 })
 
 function onTabChange(tab) {
   if (tab === 'grade') loadGradeStats()
-}
-
-async function loadSchoolStats() {
-  const params = {}
-  if (schoolEventIds.value.length) params.event_ids = schoolEventIds.value.join(',')
-  const res = await api.get('/scores/school-stats', { params })
-  schoolStats.value = res.data
-  loadTrends()
-}
-
-async function loadTrends() {
-  try {
-    const res = await api.get('/scores/trends')
-    trendData.value = res.data
-  } catch { trendData.value = null }
 }
 
 async function loadGradeStats() {
@@ -407,37 +272,6 @@ async function deleteScore(scoreId) {
 function reloadStudentStats() { if (currentStudentId) loadStudentStats() }
 
 // ===== Trend Charts =====
-const avgTrendChart = computed(() => {
-  if (!trendData.value?.length) return null
-  return {
-    tooltip: { trigger: 'axis', formatter: p => p[0].axisValue + '<br/>预测均分: <b>' + p[0].value + '</b> / 30' },
-    grid: { left: 48, right: 20, top: 12, bottom: 32 },
-    xAxis: { type: 'category', data: trendData.value.map(d => d.month), axisLabel: { color: '#a3a3a3', fontSize: 11 }, axisLine: { lineStyle: { color: '#e8e6e1' } }, axisTick: { show: false } },
-    yAxis: { type: 'value', axisLabel: { color: '#a3a3a3', fontSize: 11 }, splitLine: { lineStyle: { color: '#f5f3f0', type: 'dashed' } }, axisLine: { show: false }, axisTick: { show: false } },
-    series: [{
-      type: 'line', smooth: true, data: trendData.value.map(d => d.predicted_avg_score),
-      lineStyle: { color: '#4f46e5', width: 3 }, itemStyle: { color: '#4f46e5' }, symbol: 'circle', symbolSize: 8,
-      areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(79,70,229,0.15)' }, { offset: 1, color: 'rgba(79,70,229,0.01)' }] } },
-      label: { show: true, fontSize: 12, fontWeight: 700, color: '#4f46e5', formatter: '{c}' }
-    }]
-  }
-})
-
-const fullScoreTrendChart = computed(() => {
-  if (!trendData.value?.length) return null
-  return {
-    tooltip: { trigger: 'axis', formatter: p => p[0].axisValue + '<br/>满分率: <b>' + p[0].value + '%</b>' },
-    grid: { left: 48, right: 20, top: 12, bottom: 32 },
-    xAxis: { type: 'category', data: trendData.value.map(d => d.month), axisLabel: { color: '#a3a3a3', fontSize: 11 }, axisLine: { lineStyle: { color: '#e8e6e1' } }, axisTick: { show: false } },
-    yAxis: { type: 'value', axisLabel: { color: '#a3a3a3', fontSize: 11, formatter: '{value}%' }, splitLine: { lineStyle: { color: '#f5f3f0', type: 'dashed' } }, axisLine: { show: false }, axisTick: { show: false } },
-    series: [{
-      type: 'line', smooth: true, data: trendData.value.map(d => d.full_score_rate),
-      lineStyle: { color: '#b8860b', width: 3 }, itemStyle: { color: '#b8860b' }, symbol: 'circle', symbolSize: 8,
-      areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(184,134,11,0.15)' }, { offset: 1, color: 'rgba(184,134,11,0.01)' }] } },
-      label: { show: true, fontSize: 12, fontWeight: 700, color: '#b8860b', formatter: '{c}%' }
-    }]
-  }
-})
 
 // ===== Student trend chart (unchanged logic) =====
 const chartOption = computed(() => {
