@@ -1,43 +1,44 @@
 <template>
-  <el-container style="min-height:100vh">
-    <!-- Mobile overlay sidebar -->
-    <div v-if="mobileOpen" class="sidebar-overlay" @click="mobileOpen = false" />
-    <el-aside :width="isMobile ? (mobileOpen ? '220px' : '0px') : '220px'" class="sidebar" :class="{ 'sidebar-fixed': isMobile }">
-      <div class="logo">{{ schoolName }}</div>
-      <el-menu
-        :default-active="route.path"
-        background-color="#304156"
-        text-color="#bfcbd9"
-        active-text-color="#409EFF"
-        router
-        @select="mobileOpen = false"
-      >
-        <el-menu-item index="/admin/dashboard">
-          <el-icon><DataAnalysis /></el-icon> 驾驶舱
-        </el-menu-item>
-        <el-menu-item index="/admin/score-entry">
-          <el-icon><EditPen /></el-icon> 成绩录入
-        </el-menu-item>
-        <el-menu-item index="/admin/students">
-          <el-icon><User /></el-icon> 学生管理
-        </el-menu-item>
-        <el-menu-item index="/admin/statistics">
-          <el-icon><TrendCharts /></el-icon> 统计分析
-        </el-menu-item>
-        <el-menu-item v-if="adminInfo?.role !== 'teacher'" index="/admin/settings">
-          <el-icon><Setting /></el-icon> 系统设置
-        </el-menu-item>
-      </el-menu>
-    </el-aside>
+  <div class="app-shell">
+    <!-- Semi-transparent overlay -->
+    <transition name="fade">
+      <div v-if="drawerOpen" class="drawer-overlay" @click="drawerOpen = false" />
+    </transition>
 
-    <el-container>
-      <el-header class="topbar">
-        <div class="topbar-left">
-          <!-- Mobile hamburger -->
-          <el-button v-if="isMobile" text @click="mobileOpen = !mobileOpen" class="menu-btn">
-            <el-icon :size="22"><Expand v-if="!mobileOpen" /><Fold v-else /></el-icon>
+    <!-- Slide-out semi-transparent drawer -->
+    <transition name="slide">
+      <div v-if="drawerOpen" class="nav-drawer">
+        <div class="drawer-header">
+          <span class="drawer-title">导航菜单</span>
+          <el-button text circle @click="drawerOpen = false">
+            <el-icon :size="18"><Close /></el-icon>
           </el-button>
-          <!-- Nav dropdown -->
+        </div>
+        <div class="drawer-menu">
+          <div
+            v-for="item in navItems"
+            :key="item.path"
+            class="drawer-item"
+            :class="{ active: route.path === item.path }"
+            @click="navTo(item.path)"
+          >
+            <el-icon :size="18"><component :is="item.icon" /></el-icon>
+            <span>{{ item.label }}</span>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- Main content area -->
+    <div class="main-area">
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <!-- Nav trigger button -->
+          <el-button text class="nav-trigger" @click="drawerOpen = !drawerOpen">
+            <el-icon :size="20"><Expand /></el-icon>
+          </el-button>
+          <!-- Brand dropdown -->
           <el-dropdown trigger="click" @command="navTo">
             <span class="topbar-brand">
               🏫 体育成绩管理系统 <el-icon class="brand-arrow"><ArrowDown /></el-icon>
@@ -65,13 +66,8 @@
         </div>
 
         <div class="topbar-right">
-          <!-- Current school -->
           <span class="current-school">🏫 {{ schoolName }}</span>
-          <!-- Role badge -->
-          <span class="role-badge" :class="adminInfo?.role">
-            {{ roleLabel }}
-          </span>
-          <!-- Super-admin school switcher -->
+          <span class="role-badge" :class="adminInfo?.role">{{ roleLabel }}</span>
           <el-select
             v-if="adminInfo?.role === 'super'"
             v-model="currentSchoolId"
@@ -83,36 +79,46 @@
             <el-option :value="null" label="全部学校" />
             <el-option v-for="s in schools" :key="s.id" :value="s.id" :label="s.name" />
           </el-select>
-          <!-- User info -->
           <span class="user-avatar">{{ avatarChar }}</span>
           <span class="user-name">{{ adminInfo?.display_name || '管理员' }}</span>
           <el-button type="danger" text size="small" @click="logout">退出</el-button>
         </div>
-      </el-header>
-      <el-main class="main-content">
+      </header>
+
+      <!-- Page content -->
+      <main class="main-content">
         <router-view />
-      </el-main>
-    </el-container>
-  </el-container>
+      </main>
+    </div>
+  </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import {
+  Expand, ArrowDown, Close, DataAnalysis, EditPen,
+  User, TrendCharts, Setting
+} from '@element-plus/icons-vue'
 import api from '../../api'
 
 const router = useRouter()
 const route = useRoute()
 const adminInfo = ref(null)
 const schoolName = ref('')
-const mobileOpen = ref(false)
-const isMobile = ref(window.innerWidth < 768)
+const drawerOpen = ref(false)
 const schools = ref([])
 const currentSchoolId = ref(null)
 
-const avatarChar = computed(() => {
-  return (adminInfo.value?.display_name || '管')[0]
-})
+const navItems = [
+  { label: '驾驶舱',   path: '/admin/dashboard',   icon: DataAnalysis },
+  { label: '成绩录入', path: '/admin/score-entry',  icon: EditPen },
+  { label: '学生管理', path: '/admin/students',     icon: User },
+  { label: '统计分析', path: '/admin/statistics',   icon: TrendCharts },
+  { label: '系统设置', path: '/admin/settings',     icon: Setting, role: '!teacher' },
+]
+
+const avatarChar = computed(() => (adminInfo.value?.display_name || '管')[0])
 
 const roleLabel = computed(() => {
   const map = { super: '超级管理员', admin: '学校管理员', teacher: '教师' }
@@ -120,10 +126,9 @@ const roleLabel = computed(() => {
 })
 
 function navTo(path) {
+  drawerOpen.value = false
   router.push(path)
 }
-
-function onResize() { isMobile.value = window.innerWidth < 768 }
 
 onMounted(async () => {
   const info = localStorage.getItem('admin_info')
@@ -141,10 +146,7 @@ onMounted(async () => {
       schools.value = res.data
     } catch {}
   }
-  window.addEventListener('resize', onResize)
 })
-
-onUnmounted(() => { window.removeEventListener('resize', onResize) })
 
 async function switchSchool(schoolId) {
   try {
@@ -168,20 +170,101 @@ function logout() {
 </script>
 
 <style scoped>
-/* Sidebar */
-.sidebar { transition: width 0.3s; overflow: hidden; background: #304156; }
-.sidebar-fixed { position: fixed; left: 0; top: 0; bottom: 0; z-index: 1000; }
-.sidebar-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; }
-.logo { color: white; text-align: center; padding: 16px 8px; font-size: 14px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); white-space: nowrap; }
+/* ========== Shell ========== */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
 
-/* Topbar */
+/* ========== Drawer overlay ========== */
+.drawer-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  z-index: 998;
+}
+
+/* ========== Drawer panel ========== */
+.nav-drawer {
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: 260px;
+  background: rgba(24, 40, 65, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 999;
+  display: flex; flex-direction: column;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.drawer-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 16px 12px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.drawer-title {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px; letter-spacing: 1px;
+}
+
+.drawer-menu {
+  flex: 1; padding: 8px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+
+.drawer-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border-radius: 8px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14.5px; cursor: pointer;
+  transition: all 0.15s; user-select: none;
+}
+.drawer-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.drawer-item.active {
+  background: rgba(64, 158, 255, 0.2);
+  color: #60a5fa;
+}
+
+/* ========== Transitions ========== */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+
+.slide-enter-active, .slide-leave-active {
+  transition: transform 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+.slide-enter-from, .slide-leave-to {
+  transform: translateX(-100%);
+}
+
+/* ========== Main area ========== */
+.main-area {
+  flex: 1; display: flex; flex-direction: column;
+  min-width: 0;
+}
+
+/* ========== Topbar ========== */
 .topbar {
   background: #fff; border-bottom: 1px solid #e8e6e1;
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 16px; height: 50px; gap: 12px;
+  flex-shrink: 0;
 }
-.topbar-left { display: flex; align-items: center; gap: 8px; }
+.topbar-left { display: flex; align-items: center; gap: 4px; }
 .topbar-right { display: flex; align-items: center; gap: 12px; }
+
+/* Nav trigger button */
+.nav-trigger {
+  padding: 6px; color: #6b7280;
+}
+.nav-trigger:hover { color: #303133; background: #f3f4f6; }
 
 /* Brand dropdown trigger */
 .topbar-brand {
@@ -223,14 +306,16 @@ function logout() {
   max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* Mobile */
-.menu-btn { padding: 4px; }
+/* ========== Main content ========== */
+.main-content {
+  padding: 12px; background: #f0f2f5;
+  flex: 1; min-height: 0;
+}
 
-/* Main content */
-.main-content { padding: 12px; background: #f0f2f5; min-height: calc(100vh - 50px); }
 @media (max-width: 767px) {
   .main-content { padding: 8px; }
   .current-school { display: none; }
   .role-badge { display: none; }
+  .nav-drawer { width: 240px; }
 }
 </style>
