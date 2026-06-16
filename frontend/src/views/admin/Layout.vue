@@ -35,34 +35,11 @@
       <header class="topbar">
         <div class="topbar-left">
           <!-- Nav trigger button -->
-          <el-button text class="nav-trigger" @click="drawerOpen = !drawerOpen">
-            <el-icon :size="20"><Expand /></el-icon>
+          <el-button class="nav-trigger" @click="drawerOpen = !drawerOpen">
+            导航
           </el-button>
-          <!-- Brand dropdown -->
-          <el-dropdown trigger="click" @command="navTo">
-            <span class="topbar-brand">
-              🏫 体育成绩管理系统 <el-icon class="brand-arrow"><ArrowDown /></el-icon>
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="/admin/dashboard">
-                  <el-icon><DataAnalysis /></el-icon> 驾驶舱
-                </el-dropdown-item>
-                <el-dropdown-item command="/admin/score-entry">
-                  <el-icon><EditPen /></el-icon> 成绩录入
-                </el-dropdown-item>
-                <el-dropdown-item command="/admin/students">
-                  <el-icon><User /></el-icon> 学生管理
-                </el-dropdown-item>
-                <el-dropdown-item command="/admin/statistics">
-                  <el-icon><TrendCharts /></el-icon> 统计分析
-                </el-dropdown-item>
-                <el-dropdown-item v-if="adminInfo?.role !== 'teacher'" command="/admin/settings">
-                  <el-icon><Setting /></el-icon> 系统设置
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+          <!-- Brand -->
+          <span class="topbar-brand">🏫 体育成绩管理系统</span>
         </div>
 
         <div class="topbar-right">
@@ -97,8 +74,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
-  Expand, ArrowDown, Close, DataAnalysis, EditPen,
-  User, TrendCharts, Setting
+  Close, DataAnalysis, EditPen, User, TrendCharts, Setting
 } from '@element-plus/icons-vue'
 import api from '../../api'
 
@@ -262,19 +238,14 @@ function logout() {
 
 /* Nav trigger button */
 .nav-trigger {
-  padding: 6px; color: #6b7280;
+  padding: 5px 14px; font-size: 13px; letter-spacing: 1px;
 }
-.nav-trigger:hover { color: #303133; background: #f3f4f6; }
 
-/* Brand dropdown trigger */
+/* Brand */
 .topbar-brand {
   font-size: 15px; font-weight: 700; color: #303133;
-  cursor: pointer; display: flex; align-items: center; gap: 4px;
-  padding: 4px 8px; border-radius: 6px; transition: background 0.15s;
   white-space: nowrap; user-select: none;
 }
-.topbar-brand:hover { background: #f5f3f0; }
-.brand-arrow { font-size: 12px; color: #a3a3a3; transition: transform 0.2s; }
 
 /* Current school */
 .current-school {
