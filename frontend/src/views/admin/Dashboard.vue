@@ -11,19 +11,36 @@
         <div class="header-sub">{{ schoolName }} ｜ 本期中考学生：{{ cohort }}</div>
       </div>
       <div class="header-right">
-        <!-- Quick Nav -->
-        <nav class="quick-nav">
-          <router-link to="/admin/score-entry" class="qn-link">📝 录入</router-link>
-          <router-link to="/admin/students" class="qn-link">👥 学生</router-link>
-          <router-link to="/admin/statistics" class="qn-link">📈 统计</router-link>
-          <router-link v-if="adminInfo?.role !== 'teacher'" to="/admin/settings" class="qn-link">⚙️ 设置</router-link>
-        </nav>
         <span class="hdr-icon" title="通知">🔔<span class="dot"></span></span>
         <span class="hdr-avatar">{{ avatarChar }}</span>
       </div>
     </header>
 
-    <!-- ===== ② KPI CARDS ===== -->
+    <!-- ===== ② FUNCTION NAV ===== -->
+    <nav class="func-nav">
+      <router-link to="/admin/score-entry" class="func-card">
+        <span class="func-icon">📝</span>
+        <span class="func-title">成绩录入</span>
+        <span class="func-desc">逐人录入 · 语音 · 实时打分</span>
+      </router-link>
+      <router-link to="/admin/students" class="func-card">
+        <span class="func-icon">👥</span>
+        <span class="func-title">学生管理</span>
+        <span class="func-desc">导入 · 修改 · 删除</span>
+      </router-link>
+      <router-link to="/admin/statistics" class="func-card">
+        <span class="func-icon">📈</span>
+        <span class="func-title">统计分析</span>
+        <span class="func-desc">全校 · 年级 · 班级 · 个人</span>
+      </router-link>
+      <router-link v-if="adminInfo?.role !== 'teacher'" to="/admin/settings" class="func-card">
+        <span class="func-icon">⚙️</span>
+        <span class="func-title">系统设置</span>
+        <span class="func-desc">项目 · 管理员 · 配置</span>
+      </router-link>
+    </nav>
+
+    <!-- ===== ③ KPI CARDS ===== -->
     <div class="section-label">核心决策指标</div>
     <section class="kpi-grid" v-if="stats">
       <div class="kpi-card cyan">
@@ -69,25 +86,6 @@
     <div v-if="!stats" class="loading-box" style="display:flex;gap:12px;margin-bottom:22px">
       <div v-for="i in 4" :key="i" style="flex:1;height:120px;background:#132238;border-radius:14px;border:1px solid #1e3a5f;animation:pulse 1.5s infinite" />
     </div>
-
-    <!-- ===== ③ SECONDARY STATS ===== -->
-    <section class="stats-bar" v-if="stats">
-      <div class="stat-item">
-        <span class="stat-icon">👥</span><span class="stat-label">考生人数</span><span class="stat-num">{{ stats.total_students?.toLocaleString() ?? '--' }}</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-icon">🏃</span><span class="stat-label">本月训练</span><span class="stat-num">{{ (stats.training_count_this_month || 0).toLocaleString() }}次</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-icon">⚠️</span><span class="stat-label">风险班级</span><span class="stat-num">{{ stats.risk_classes?.length ?? 0 }}个</span>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-item">
-        <span class="stat-icon">📊</span><span class="stat-label">班级总数</span><span class="stat-num">{{ stats.total_classes ?? '--' }}个</span>
-      </div>
-    </section>
 
     <!-- ===== ④ CHARTS ===== -->
     <div class="section-label">多维数据分析</div>
@@ -365,14 +363,28 @@ async function loadData() {
 .header-sub  { font-size:11.5px; color:var(--text-b); margin-top:2px; }
 .header-right { display:flex; align-items:center; gap:14px; }
 
-/* Quick nav */
-.quick-nav { display:flex; align-items:center; gap:6px; }
-.qn-link {
-  font-size:11px; font-weight:600; color:var(--text-b); text-decoration:none;
-  padding:5px 10px; border-radius:8px; transition:all 0.2s;
-  border:1px solid transparent; white-space:nowrap;
+/* ===== FUNCTION NAV ===== */
+.func-nav {
+  display:grid; grid-template-columns: repeat(4, 1fr);
+  gap:14px; margin-bottom:24px;
 }
-.qn-link:hover { color:var(--cyan); border-color:var(--border); background:rgba(6,182,212,0.06); }
+@media (max-width: 1000px) { .func-nav { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 500px)  { .func-nav { grid-template-columns: 1fr; } }
+
+.func-card {
+  background: var(--bg-card); border:1px solid var(--border); border-radius:14px;
+  padding:22px 20px; text-align:center; text-decoration:none;
+  transition:all 0.25s ease; display:flex; flex-direction:column; align-items:center; gap:8px;
+}
+.func-card:hover {
+  transform:translateY(-2px);
+  border-color:rgba(6,182,212,0.35);
+  box-shadow:0 8px 32px rgba(0,0,0,0.35);
+  background:var(--bg-hover);
+}
+.func-icon { font-size:32px; line-height:1; }
+.func-title { font-size:15px; font-weight:700; color:var(--text-a); }
+.func-desc { font-size:11px; color:var(--text-c); }
 
 .hdr-icon { font-size:17px; color:var(--text-b); cursor:pointer; transition:color 0.2s; position:relative; }
 .hdr-icon:hover { color: var(--cyan); }
@@ -410,15 +422,6 @@ async function loadData() {
 .kpi-delta.flat { color:var(--text-c); }
 .kpi-arrow { font-size:11px; }
 .kpi-sub  { margin-top:2px; font-size:10px; color:var(--text-c); }
-
-/* ===== STATS BAR ===== */
-.stats-bar { display:flex; align-items:center; flex-wrap:wrap; background:var(--bg-card); border:1px solid var(--border-sub); border-radius:10px; padding:8px 4px; margin-bottom:22px; }
-.stat-item { display:flex; align-items:center; gap:7px; padding:6px 16px; flex:1; min-width:80px; justify-content:center; }
-.stat-icon { font-size:14px; flex-shrink:0; opacity:0.8; }
-.stat-label { font-size:10.5px; color:var(--text-c); white-space:nowrap; }
-.stat-num { font-size:15px; font-weight:700; color:var(--text-a); }
-.stat-divider { width:1px; height:18px; background:var(--border-sub); flex-shrink:0; }
-@media (max-width: 600px) { .stat-divider { display:none; } }
 
 /* ===== CHARTS ===== */
 .charts-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-bottom:20px; }
