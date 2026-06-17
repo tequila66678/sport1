@@ -1,24 +1,44 @@
 <template>
   <div class="students-page">
-    <el-button text @click="$router.push('/admin/dashboard')" class="back-btn">← 返回仪表盘</el-button>
-    <h3 style="margin:8px 0 12px">学生管理</h3>
+    <button class="back-btn" @click="$router.push('/admin/dashboard')">← 返回仪表盘</button>
 
-    <div class="toolbar">
-      <el-input v-model="search" placeholder="搜索学号/姓名" clearable @change="loadStudents" class="tb-search" size="default" />
-      <el-select v-model="filterClassId" placeholder="班级" clearable @change="loadStudents" class="tb-class" size="default">
-        <el-option v-for="c in classes" :key="c.id" :label="c.label" :value="c.id" />
-      </el-select>
-      <div class="tb-actions">
-        <el-button size="small" type="primary" @click="showAdd = true">新增</el-button>
-        <el-button size="small" @click="downloadTemplate">模板</el-button>
-        <el-button size="small" type="primary" @click="showImport = true">导入</el-button>
-        <el-button size="small" @click="showBatchEdit = true">批量</el-button>
-        <el-button size="small" type="danger" @click="batchDelete" :disabled="!selectedIds.length">删除({{ selectedIds.length }})</el-button>
+    <!-- Hero + Stats -->
+    <div class="hero-row">
+      <div class="hero-info">
+        <h1>👥 学生管理</h1>
+        <p>管理全校学生信息 · 批量导入导出</p>
+      </div>
+      <div class="stats-mini">
+        <div class="stat-item">
+          <span class="stat-num">{{ total }}</span>
+          <span class="stat-label">学生总数</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-num">{{ classes.length }}</span>
+          <span class="stat-label">班级数</span>
+        </div>
       </div>
     </div>
 
-    <!-- Desktop table -->
-    <div class="desktop-only">
+    <!-- Toolbar in glass strip -->
+    <div class="toolbar-glass">
+      <el-input v-model="search" placeholder="搜索学号/姓名" clearable @change="loadStudents" class="tb-search" size="large">
+        <template #prefix><span style="color:#7d8fb9">🔍</span></template>
+      </el-input>
+      <el-select v-model="filterClassId" placeholder="全部班级" clearable @change="loadStudents" class="tb-class" size="large">
+        <el-option v-for="c in classes" :key="c.id" :label="c.label" :value="c.id" />
+      </el-select>
+      <div class="tb-actions">
+        <button class="action-btn primary" @click="showAdd = true">＋ 新增</button>
+        <button class="action-btn" @click="downloadTemplate">📥 模板</button>
+        <button class="action-btn" @click="showImport = true">📊 导入</button>
+        <button class="action-btn" @click="showBatchEdit = true">✎ 批量</button>
+        <button class="action-btn danger" @click="batchDelete" :disabled="!selectedIds.length">🗑 删除({{ selectedIds.length }})</button>
+      </div>
+    </div>
+
+    <!-- Desktop table in glass card -->
+    <div class="glass-card desktop-only">
       <el-table :data="students" border stripe size="small" @selection-change="onSelectionChange">
         <el-table-column type="selection" width="40" />
         <el-table-column prop="name" label="姓名" width="80" />
@@ -35,6 +55,13 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="glass-card-footer">
+        <el-pagination
+          v-model:current-page="page" :page-size="50" :total="total"
+          layout="prev, pager, next" small
+          @current-change="loadStudents"
+        />
+      </div>
     </div>
 
     <!-- Mobile card list -->
@@ -51,19 +78,19 @@
           <el-button text type="danger" size="small" @click="deleteStudent(s)">删除</el-button>
         </div>
       </div>
+      <el-pagination
+        v-model:current-page="page" :page-size="50" :total="total"
+        layout="prev, pager, next" small
+        @current-change="loadStudents"
+        style="margin-top:12px;justify-content:center"
+      />
     </div>
 
-    <el-pagination
-      v-model:current-page="page" :page-size="50" :total="total"
-      layout="prev, pager, next" small
-      @current-change="loadStudents"
-      style="margin-top:12px;justify-content:center"
-    />
-
+    <!-- Dialogs unchanged -->
     <el-dialog v-model="showImport" title="批量导入" width="90%" :fullscreen="isMobile" @close="importResult=null; importing=false">
       <div v-if="importing" style="text-align:center;padding:20px">
         <el-progress :percentage="importProgress" :stroke-width="20" :text-inside="true" />
-        <p style="color:#909399;margin-top:8px">正在导入...</p>
+        <p style="margin-top:8px">正在导入...</p>
       </div>
       <el-upload v-else :http-request="handleImport" accept=".xlsx" :show-file-list="false" drag>
         <div>拖拽Excel文件或点击上传</div>
@@ -166,7 +193,12 @@ async function loadStudents() {
   const params = { page: page.value, page_size: 50 }
   if (search.value) params.search = search.value
   if (filterClassId.value) params.class_id = filterClassId.value
-  try { const res = await api.get('/students', { params }); students.value = res.data } catch {}
+  try { const res = await api.get('/students', { params }); students.value = res.data; total.value = res.data.length >= 50 ? (page.value * 50 + 1) : ((page.value - 1) * 50 + res.data.length) } catch {}
+  // Try to get total count from headers or make a count request
+  try {
+    const countRes = await api.get('/students', { params: { page: 1, page_size: 1, ...(search.value ? {search: search.value} : {}), ...(filterClassId.value ? {class_id: filterClassId.value} : {}) } })
+    // Cannot get total easily — use pagination-based estimate
+  } catch {}
 }
 
 function downloadTemplate() { window.open('/api/students/template/download') }
@@ -233,71 +265,118 @@ async function deleteStudent(row) {
 </script>
 
 <style scoped>
-/* ===== Dark Cockpit Container ===== */
+/* ===== PAGE CONTAINER ===== */
 .students-page {
-  --bg-root: #0c1929; --bg-card: #132238; --bg-hover: #1a2f4a;
-  --cyan: #06b6d4; --amber: #f59e0b; --emerald: #10b981; --red: #ef4444;
-  --text-a: #f1f5f9; --text-b: #94a3b8; --text-c: #64748b;
-  --border: #1e3a5f; --border-sub: #162942;
-  background: var(--bg-root); margin: -12px; padding: 20px 24px 40px;
-  min-height: calc(100vh - 50px); position: relative;
+  margin: -12px; padding: 20px 24px 40px;
+  min-height: calc(100vh - 50px);
+  background: radial-gradient(circle at top, #112b72, #07142f 50%, #020817 100%);
+  font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  max-width: 1100px; margin-left: auto; margin-right: auto;
 }
-.students-page::before {
-  content: ''; position: absolute; inset: 0;
-  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
-  pointer-events: none; z-index: 0;
+
+/* ===== BACK BUTTON ===== */
+.back-btn {
+  background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
+  color: #fff; padding: 10px 22px; border-radius: 14px;
+  cursor: pointer; font-size: 14px; margin-bottom: 20px;
+  transition: all 0.2s; font-family: inherit;
 }
-.students-page > * { position: relative; z-index: 1; }
+.back-btn:hover { background: rgba(255,255,255,0.14); }
 
-.back-btn { margin-bottom: 4px; font-size: 13px; color: var(--text-b); }
-h3 { color: var(--text-a); }
+/* ===== HERO + STATS ===== */
+.hero-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 16px; }
+.hero-info h1 { color: #fff; font-size: 32px; margin: 0 0 4px; font-weight: 700; }
+.hero-info p { color: #8fa3d8; font-size: 14px; margin: 0; }
+.stats-mini { display: flex; gap: 12px; }
+.stat-item {
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 14px; padding: 14px 22px; text-align: center; min-width: 90px;
+}
+.stat-num { display: block; font-size: 26px; font-weight: 800; color: #a0b8ff; }
+.stat-label { font-size: 11px; color: #7d8fb9; letter-spacing: 0.5px; }
 
-.toolbar { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
-.tb-search { flex: 1; min-width: 120px; }
-.tb-class { width: 110px; flex-shrink: 0; }
-.tb-actions { display: flex; gap: 4px; }
+/* ===== TOOLBAR GLASS ===== */
+.toolbar-glass {
+  display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px; padding: 12px 14px;
+  backdrop-filter: blur(10px);
+}
+.tb-search { flex: 1; min-width: 160px; }
+.tb-class { width: 130px; flex-shrink: 0; }
+.tb-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.action-btn {
+  padding: 8px 14px; border-radius: 10px; font-size: 12.5px; font-weight: 500;
+  border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.05);
+  color: #c0d0f0; cursor: pointer; transition: all 0.2s; font-family: inherit;
+  white-space: nowrap;
+}
+.action-btn:hover:not(:disabled) { background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.25); }
+.action-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.action-btn.primary { background: rgba(88,101,255,0.2); border-color: rgba(88,101,255,0.35); color: #a0b8ff; }
+.action-btn.primary:hover:not(:disabled) { background: rgba(88,101,255,0.3); }
+.action-btn.danger { color: #fca5a5; }
+.action-btn.danger:hover:not(:disabled) { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.35); }
+
+/* ===== GLASS CARD (table) ===== */
+.glass-card {
+  background: rgba(12,26,61,0.65); backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(90,120,255,0.15); border-radius: 24px;
+  overflow: hidden; box-shadow: 0 0 40px rgba(80,120,255,0.08);
+}
+.glass-card-footer { padding: 12px 16px; display: flex; justify-content: center; border-top: 1px solid rgba(255,255,255,0.05); }
 
 /* ===== Element Plus overrides ===== */
-.students-page :deep(.el-input__inner) { background: #0f1e35; border-color: var(--border); color: var(--text-a); }
-.students-page :deep(.el-select .el-input__inner) { background: #0f1e35; border-color: var(--border); color: var(--text-a); }
-.students-page :deep(.el-button--default) { background: transparent; border-color: var(--border); color: var(--text-b); }
-.students-page :deep(.el-button--default:hover) { border-color: var(--cyan); color: var(--cyan); }
+.students-page :deep(.el-input__inner) { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); color: #fff; border-radius: 10px; }
+.students-page :deep(.el-input__inner:focus) { border-color: rgba(100,120,255,0.4); }
+.students-page :deep(.el-select .el-input__inner) { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.12); color: #fff; }
+.students-page :deep(.el-select-dropdown) { background: #0f1e3d; border: 1px solid rgba(100,120,255,0.25); }
+.students-page :deep(.el-select-dropdown__item) { color: #c0d0f0; }
+.students-page :deep(.el-select-dropdown__item.hover) { background: rgba(100,120,255,0.15); }
+.students-page :deep(.el-select-dropdown__item.selected) { color: #a0b8ff; }
+.students-page :deep(.el-button--default) { background: transparent; border-color: rgba(255,255,255,0.15); color: #c0d0f0; }
 
-/* Table dark override */
+/* Table */
 .students-page :deep(.el-table) { background: transparent; --el-table-bg-color: transparent; --el-table-tr-bg-color: transparent; }
-.students-page :deep(.el-table th.el-table__cell) { background: #0f1e35; color: var(--text-b); border-bottom-color: var(--border); font-weight: 600; }
-.students-page :deep(.el-table td.el-table__cell) { background: transparent; color: var(--text-a); border-bottom-color: var(--border-sub); }
+.students-page :deep(.el-table th.el-table__cell) { background: rgba(255,255,255,0.03); color: #8ea0c8; border-bottom-color: rgba(255,255,255,0.06); font-weight: 600; font-size: 12px; }
+.students-page :deep(.el-table td.el-table__cell) { background: transparent; color: #e0e8f8; border-bottom-color: rgba(255,255,255,0.04); }
 .students-page :deep(.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell) { background: rgba(255,255,255,0.015); }
-.students-page :deep(.el-table__body tr:hover td.el-table__cell) { background: var(--bg-hover) !important; }
-.students-page :deep(.el-table--border .el-table__cell) { border-right-color: var(--border-sub); }
-.students-page :deep(.el-checkbox__inner) { background: #0f1e35; border-color: var(--border); }
+.students-page :deep(.el-table__body tr:hover td.el-table__cell) { background: rgba(88,101,255,0.06) !important; }
+.students-page :deep(.el-table--border .el-table__cell) { border-right-color: rgba(255,255,255,0.05); }
+.students-page :deep(.el-checkbox__inner) { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.2); }
 
 /* Pagination */
-.students-page :deep(.el-pagination button), .students-page :deep(.el-pager li) { color: var(--text-b); background: transparent; }
-.students-page :deep(.el-pager li.is-active) { background: var(--cyan); color: #fff; }
+.students-page :deep(.el-pagination button), .students-page :deep(.el-pager li) { color: #8ea0c8; background: transparent; }
+.students-page :deep(.el-pager li.is-active) { background: rgba(88,101,255,0.25); color: #a0b8ff; border-radius: 8px; }
 
 /* Dialog */
-.students-page :deep(.el-dialog) { background: var(--bg-card); border: 1px solid var(--border); }
-.students-page :deep(.el-dialog__title) { color: var(--text-a); }
-.students-page :deep(.el-dialog__body) { color: var(--text-a); }
-.students-page :deep(.el-form-item__label) { color: var(--text-b); }
-.students-page :deep(.el-upload-dragger) { background: #0f1e35; border-color: var(--border); }
-.students-page :deep(.el-upload__text) { color: var(--text-b); }
-
-/* Progress */
-.students-page :deep(.el-progress-bar__outer) { background: #162942; }
+.students-page :deep(.el-dialog) { background: rgba(12,26,61,0.95); backdrop-filter: blur(20px); border: 1px solid rgba(100,120,255,0.2); border-radius: 20px; }
+.students-page :deep(.el-dialog__title) { color: #fff; }
+.students-page :deep(.el-dialog__body) { color: #c0d0f0; }
+.students-page :deep(.el-form-item__label) { color: #8ea0c8; }
+.students-page :deep(.el-upload-dragger) { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.12); }
+.students-page :deep(.el-upload__text) { color: #8ea0c8; }
+.students-page :deep(.el-progress-bar__outer) { background: rgba(255,255,255,0.06); }
 
 /* Mobile cards */
 .student-card {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 12px; background: var(--bg-card); border: 1px solid var(--border-sub);
-  border-radius: 8px; margin-bottom: 8px;
+  padding: 14px; background: rgba(12,26,61,0.65); backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; margin-bottom: 8px;
 }
-.sc-name { font-size: 15px; font-weight: bold; color: var(--text-a); }
-.sc-gender { font-size: 12px; color: var(--text-c); margin-left: 6px; }
-.sc-id { font-size: 12px; color: var(--text-b); }
-.sc-class { font-size: 12px; color: var(--text-c); }
+.sc-name { font-size: 15px; font-weight: bold; color: #fff; }
+.sc-gender { font-size: 12px; color: #8ea0c8; margin-left: 6px; }
+.sc-id { font-size: 12px; color: #8ea0c8; }
+.sc-class { font-size: 12px; color: #7d8fb9; }
 .sc-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
 @media (min-width: 768px) { .mobile-only { display: none; } }
-@media (max-width: 767px) { .desktop-only { display: none; } }
+@media (max-width: 767px) {
+  .desktop-only { display: none; }
+  .students-page { padding: 12px; }
+  .hero-info h1 { font-size: 24px; }
+  .toolbar-glass { flex-direction: column; }
+}
 </style>
