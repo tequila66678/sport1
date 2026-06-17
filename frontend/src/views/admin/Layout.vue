@@ -279,7 +279,7 @@ function logout() {
 
 /* ========== Main content ========== */
 .main-content {
-  padding: 12px; background: #f0f2f5;
+  padding: 12px; background: #020817;
   flex: 1; min-height: 0;
 }
 
@@ -288,5 +288,124 @@ function logout() {
   .current-school { display: none; }
   .role-badge { display: none; }
   .nav-drawer { width: 240px; }
+}
+</style>
+
+<!-- Global overrides for teleported Element Plus components (rendered to body, unscoped) -->
+<style>
+/* Select dropdown */
+.el-select-dropdown {
+  background: #0f1e3d !important;
+  border: 1px solid rgba(100,120,255,0.25) !important;
+}
+.el-select-dropdown__item {
+  color: #c0d0f0 !important;
+}
+.el-select-dropdown__item.hover,
+.el-select-dropdown__item:hover {
+  background: rgba(100,120,255,0.15) !important;
+}
+.el-select-dropdown__item.selected {
+  color: #a0b8ff !important;
+  font-weight: 600;
+}
+
+/* Date picker panel */
+.el-picker-panel {
+  background: #0f1e3d !important;
+  border: 1px solid rgba(100,120,255,0.25) !important;
+  color: #c0d0f0 !important;
+}
+.el-date-picker__header-label {
+  color: #c0d0f0 !important;
+}
+.el-date-table th {
+  color: #7d8fb9 !important;
+}
+.el-date-table td {
+  color: #c0d0f0 !important;
+}
+.el-date-table td.current:not(.disabled) .el-date-table-cell__text {
+  background: rgba(88,101,255,0.3) !important;
+  color: #fff !important;
+}
+.el-date-table td:hover:not(.disabled) .el-date-table-cell__text {
+  background: rgba(100,120,255,0.15) !important;
+}
+.el-picker-panel__icon-btn {
+  color: #8ea0c8 !important;
+}
+.el-picker-panel__icon-btn:hover {
+  color: #a0b8ff !important;
+}
+
+/* Dialog (teleported) */
+.el-overlay {
+  background: rgba(0,0,0,0.5) !important;
+}
+.el-dialog {
+  background: rgba(12,26,61,0.95) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(100,120,255,0.2) !important;
+  border-radius: 20px !important;
+}
+.el-dialog__title {
+  color: #fff !important;
+}
+.el-dialog__body {
+  color: #c0d0f0 !important;
+}
+
+/* Message box */
+.el-message-box {
+  background: #0f1e3d !important;
+  border: 1px solid rgba(100,120,255,0.2) !important;
+}
+.el-message-box__title {
+  color: #fff !important;
+}
+.el-message-box__message {
+  color: #c0d0f0 !important;
+}
+
+/* Input autofill override */
+.el-input__inner:-webkit-autofill,
+.el-input__inner:-webkit-autofill:hover,
+.el-input__inner:-webkit-autofill:focus {
+  -webkit-text-fill-color: #fff !important;
+  -webkit-box-shadow: 0 0 0px 1000px #0f1e35 inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Popper / tooltip */
+.el-popper {
+  background: #0f1e3d !important;
+  border: 1px solid rgba(100,120,255,0.2) !important;
+  color: #c0d0f0 !important;
+}
+.el-popper__arrow::before {
+  background: #0f1e3d !important;
+  border: 1px solid rgba(100,120,255,0.2) !important;
+}
+
+/* Time picker panel */
+.el-time-panel {
+  background: #0f1e3d !important;
+  border-left: 1px solid rgba(100,120,255,0.2) !important;
+}
+.el-time-spinner__item {
+  color: #7d8fb9 !important;
+}
+.el-time-spinner__item.active:not(.disabled) {
+  color: #a0b8ff !important;
+}
+
+/* Input number */
+.el-input-number__decrease,
+.el-input-number__increase {
+  background: rgba(255,255,255,0.04) !important;
+  color: #8ea0c8 !important;
+  border-color: rgba(255,255,255,0.12) !important;
 }
 </style>
