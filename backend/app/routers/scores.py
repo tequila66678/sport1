@@ -1212,6 +1212,51 @@ def get_class_students(
     students = q.order_by(Student.student_id).all()
     return [{"id": s.id, "student_id": s.student_id, "name": s.name, "gender": s.gender.value} for s in students]
 
+
+@router.get("/today-summary")
+def today_summary(
+    db: Session = Depends(get_db),
+    current: Admin = Depends(get_current_admin)
+):
+    """Return today's score entry summary grouped by class + event."""
+    sid = _get_admin_school(current)
+    today = date.today()
+    scores = _maybe_filter(db.query(Score), Score, sid).filter(Score.test_date == today).all()
+    if not scores:
+        return {"records": [], "total": 0}
+
+    # Collect unique student/event ids to batch-load names
+    student_ids = list({s.student_id for s in scores})
+    event_ids = list({s.event_id for s in scores})
+
+    students_map = {s.id: s for s in db.query(Student).filter(Student.id.in_(student_ids)).all()}
+    events_map = {e.id: e for e in db.query(SportEvent).filter(SportEvent.id.in_(event_ids)).all()}
+    classes_map = {}
+    if student_ids:
+        student_class_ids = {s.class_id for s in students_map.values()}
+        classes_map = {c.id: c for c in db.query(Class).filter(Class.id.in_(student_class_ids)).all()}
+
+    # Group by (class_id, event_id)
+    groups = defaultdict(lambda: {"count": 0, "student_ids": set()})
+    for s in scores:
+        key = (students_map[s.student_id].class_id if s.student_id in students_map else 0, s.event_id)
+        groups[key]["count"] += 1
+        groups[key]["student_ids"].add(s.student_id)
+
+    records = []
+    for (class_id, event_id), g in groups.items():
+        cls = classes_map.get(class_id)
+        evt = events_map.get(event_id)
+        records.append({
+            "class_label": f"{cls.grade}{cls.name}" if cls else "未知班级",
+            "event_name": evt.name if evt else "未知项目",
+            "count": g["count"],
+            "student_count": len(g["student_ids"])
+        })
+
+    return {"records": records, "total": sum(r["count"] for r in records)}
+
+
 @router.get("/backup-all")
 def backup_all_data(db: Session = Depends(get_db), current: Admin = Depends(get_school_admin)):
     """Backup current school data as Excel (7 sheets)."""
