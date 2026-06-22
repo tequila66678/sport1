@@ -293,6 +293,31 @@ function logout() {
 
 <!-- Global overrides for teleported Element Plus components (rendered to body, unscoped) -->
 <style>
+/* ===== INPUT TEXT COLOR (most critical — invisible text fix) ===== */
+.el-input__inner {
+  color: #e0e8f8 !important;
+  background-color: rgba(255,255,255,0.04) !important;
+}
+.el-input__inner::placeholder {
+  color: #64748b !important;
+}
+.el-input__inner:focus {
+  color: #fff !important;
+}
+
+.el-textarea__inner {
+  color: #e0e8f8 !important;
+  background-color: rgba(255,255,255,0.04) !important;
+}
+.el-textarea__inner::placeholder {
+  color: #64748b !important;
+}
+
+/* Form labels */
+.el-form-item__label {
+  color: #8ea0c8 !important;
+}
+
 /* Select dropdown */
 .el-select-dropdown {
   background: #0f1e3d !important;
