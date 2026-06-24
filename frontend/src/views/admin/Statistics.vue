@@ -368,8 +368,17 @@ h3 { color: var(--text-a); }
 .stats-page :deep(.el-tabs__item) { color: var(--text-b); }
 .stats-page :deep(.el-tabs__item.is-active) { color: var(--cyan); }
 .stats-page :deep(.el-tabs__active-bar) { background: var(--cyan); }
-.stats-page :deep(.el-select .el-input__inner) { background: #0f1e35; border-color: var(--border); color: var(--text-a); }
-.stats-page :deep(.el-input__inner) { background: #0f1e35; border-color: var(--border); color: var(--text-a); }
+.stats-page :deep(.el-input__wrapper) {
+  background: #0f1e35;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: none;
+}
+.stats-page :deep(.el-input.is-focus .el-input__wrapper) {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(6,182,212,0.15);
+}
+.stats-page :deep(.el-input__inner) { color: var(--text-a); }
 .stats-page :deep(.el-button--default) { background: transparent; border-color: var(--border); color: var(--text-b); }
 .stats-page :deep(.el-card) { background: var(--bg-card); border-color: var(--border-sub); color: var(--text-a); }
 .stats-page :deep(.el-card__header) { padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--text-a); border-bottom-color: var(--border-sub); }

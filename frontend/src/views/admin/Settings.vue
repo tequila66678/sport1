@@ -402,10 +402,18 @@ h4 { color: #e0e8f8; }
 .config-section { max-width: 500px; }
 
 /* ===== Element Plus overrides ===== */
-.settings-page :deep(.el-input__inner) { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); color: #fff; border-radius: 10px; }
-.settings-page :deep(.el-input__inner:focus) { border-color: rgba(100,120,255,0.4); }
-.settings-page :deep(.el-select .el-input__inner) { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.12); color: #fff; }
-.settings-page :deep(.el-input-number .el-input__inner) { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.12); color: #fff; }
+.settings-page :deep(.el-input__wrapper) {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  box-shadow: none;
+}
+.settings-page :deep(.el-input__wrapper:hover) { border-color: rgba(255,255,255,0.2); }
+.settings-page :deep(.el-input.is-focus .el-input__wrapper) {
+  border-color: rgba(100,120,255,0.4);
+  box-shadow: 0 0 0 1px rgba(100,120,255,0.15);
+}
+.settings-page :deep(.el-input__inner) { color: #fff; }
 .settings-page :deep(.el-select-dropdown) { background: #0f1e3d; border: 1px solid rgba(100,120,255,0.25); }
 .settings-page :deep(.el-select-dropdown__item) { color: #c0d0f0; }
 .settings-page :deep(.el-select-dropdown__item.hover) { background: rgba(100,120,255,0.15); }

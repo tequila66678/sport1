@@ -28,6 +28,9 @@
   --el-bg-color-overlay: #0f1e3d;
 
   /* ---- Border ---- */
+  --el-border-radius-base: 10px;
+  --el-border-radius-small: 8px;
+  --el-input-border-radius: 10px;
   --el-border-color: rgba(255, 255, 255, 0.12);
   --el-border-color-light: rgba(255, 255, 255, 0.08);
   --el-border-color-lighter: rgba(255, 255, 255, 0.06);

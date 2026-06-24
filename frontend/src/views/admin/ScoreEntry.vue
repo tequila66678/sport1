@@ -402,15 +402,23 @@ async function saveAndNext() {
 
 /* Element Plus select & date-picker glass overrides */
 .se-select-el, .se-date-el { width: 100%; display: block; }
-.se-page :deep(.se-select-el .el-input__inner),
-.se-page :deep(.se-date-el .el-input__inner) {
+.se-page :deep(.se-select-el .el-input__wrapper),
+.se-page :deep(.se-date-el .el-input__wrapper) {
   height: 60px; background: rgba(255,255,255,0.03);
   border: 1px solid rgba(100,120,255,0.2); border-radius: 16px;
-  color: #fff; font-size: 17px; padding: 0 20px;
+  box-shadow: none;
 }
-.se-page :deep(.se-select-el .el-input__inner:focus),
-.se-page :deep(.se-date-el .el-input__inner:focus) {
+.se-page :deep(.se-select-el .el-input__inner),
+.se-page :deep(.se-date-el .el-input__inner) {
+  color: #fff; font-size: 17px;
+}
+.se-page :deep(.se-select-el .el-input__wrapper:hover),
+.se-page :deep(.se-date-el .el-input__wrapper:hover) {
+  border-color: rgba(100,120,255,0.35);
+}
+.se-page :deep(.el-select.is-focus .el-input__wrapper) {
   border-color: rgba(100,120,255,0.5);
+  box-shadow: 0 0 0 1px rgba(100,120,255,0.15);
 }
 .se-page :deep(.el-select .el-input__suffix) { color: rgba(255,255,255,0.5); }
 .se-page :deep(.el-select-dropdown) { background: #0f1e3d; border: 1px solid rgba(100,120,255,0.25); }
@@ -485,12 +493,20 @@ async function saveAndNext() {
 
 /* Entry input */
 .entry-input-area { margin: 12px 0 8px; }
+.se-page :deep(.entry-input .el-input__wrapper) {
+  border-radius: 16px;
+  background: rgba(255,255,255,0.03);
+  border: 2px solid rgba(100,120,255,0.2);
+  box-shadow: none;
+}
 .se-page :deep(.entry-input .el-input__inner) {
-  text-align: center; font-size: 32px; height: 64px; border-radius: 16px;
-  background: rgba(255,255,255,0.03); border: 2px solid rgba(100,120,255,0.2);
+  text-align: center; font-size: 32px; height: 64px;
   color: #fff; font-weight: 600; letter-spacing: 1px;
 }
-.se-page :deep(.entry-input .el-input__inner:focus) { border-color: #5865ff; }
+.se-page :deep(.entry-input.el-input.is-focus .el-input__wrapper) {
+  border-color: #5865ff;
+  box-shadow: 0 0 0 2px rgba(88,101,255,0.15);
+}
 .entry-hint { font-size: 12px; color: #7d8fb9; margin-top: 8px; text-align: center; }
 
 /* Entry result */
