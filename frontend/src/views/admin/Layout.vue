@@ -232,6 +232,12 @@ function logout() {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 16px; height: 50px; gap: 12px;
   flex-shrink: 0;
+  /* Reset Element Plus dark variables for the light topbar */
+  --el-input-text-color: #303133;
+  --el-input-bg-color: #fff;
+  --el-text-color-regular: #303133;
+  --el-fill-color-blank: #fff;
+  --el-border-color: #dcdfe6;
 }
 .topbar-left { display: flex; align-items: center; gap: 4px; }
 .topbar-right { display: flex; align-items: center; gap: 12px; }

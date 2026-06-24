@@ -1,0 +1,54 @@
+/* ===== Dark Theme CSS Variables — override Element Plus defaults ===== */
+/* Must be loaded BEFORE element-plus/dist/index.css */
+
+:root {
+  /* ---- Text ---- */
+  --el-text-color-primary: #e0e8f8;
+  --el-text-color-regular: #c0d0f0;
+  --el-text-color-secondary: #8ea0c8;
+  --el-text-color-placeholder: #64748b;
+  --el-text-color-disabled: #5a6a88;
+
+  /* ---- Input ---- */
+  --el-input-text-color: #e0e8f8;
+  --el-input-bg-color: rgba(255, 255, 255, 0.04);
+  --el-input-border-color: rgba(255, 255, 255, 0.12);
+  --el-input-hover-border-color: rgba(255, 255, 255, 0.2);
+  --el-input-focus-border-color: rgba(100, 120, 255, 0.5);
+  --el-input-placeholder-color: #64748b;
+  --el-input-clear-hover-color: #c0d0f0;
+
+  /* ---- Fill / Background ---- */
+  --el-fill-color-blank: rgba(255, 255, 255, 0.04);
+  --el-fill-color: rgba(255, 255, 255, 0.06);
+  --el-fill-color-light: rgba(255, 255, 255, 0.03);
+  --el-fill-color-lighter: rgba(255, 255, 255, 0.02);
+  --el-bg-color: #0c1a2e;
+  --el-bg-color-page: #020817;
+  --el-bg-color-overlay: #0f1e3d;
+
+  /* ---- Border ---- */
+  --el-border-color: rgba(255, 255, 255, 0.12);
+  --el-border-color-light: rgba(255, 255, 255, 0.08);
+  --el-border-color-lighter: rgba(255, 255, 255, 0.06);
+  --el-border-color-extra-light: rgba(255, 255, 255, 0.04);
+  --el-border-color-dark: rgba(255, 255, 255, 0.2);
+  --el-border-color-hover: rgba(255, 255, 255, 0.2);
+
+  /* ---- Primary ---- */
+  --el-color-primary: #5865ff;
+  --el-color-primary-light-3: #7b85ff;
+  --el-color-primary-light-5: #9da5ff;
+  --el-color-primary-light-7: #c0c4ff;
+  --el-color-primary-light-9: #e2e3ff;
+  --el-color-primary-dark-2: #4650cc;
+
+  /* ---- Disabled ---- */
+  --el-disabled-text-color: #5a6a88;
+  --el-disabled-bg-color: rgba(255, 255, 255, 0.04);
+  --el-disabled-border-color: rgba(255, 255, 255, 0.06);
+
+  /* ---- Dialog / Overlay ---- */
+  --el-overlay-color: rgba(0, 0, 0, 0.5);
+  --el-dialog-bg-color: #0f1e3d;
+}
