@@ -74,7 +74,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
-  Close, DataAnalysis, EditPen, User, TrendCharts, Setting
+  Close, DataAnalysis, EditPen, User, TrendCharts, Setting, Calendar
 } from '@element-plus/icons-vue'
 import api from '../../api'
 
@@ -90,6 +90,7 @@ const navItems = [
   { label: '驾驶舱',   path: '/admin/dashboard',   icon: DataAnalysis },
   { label: '成绩录入', path: '/admin/score-entry',  icon: EditPen },
   { label: '学生管理', path: '/admin/students',     icon: User },
+  { label: '签到管理', path: '/admin/attendance',   icon: Calendar },
   { label: '统计分析', path: '/admin/statistics',   icon: TrendCharts },
   { label: '系统设置', path: '/admin/settings',     icon: Setting, role: '!teacher' },
 ]

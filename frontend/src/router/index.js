@@ -23,6 +23,7 @@ const routes = [
       { path: 'score-entry', name: 'ScoreEntry', component: () => import('../views/admin/ScoreEntry.vue') },
       { path: 'students', name: 'Students', component: () => import('../views/admin/Students.vue') },
       { path: 'statistics', name: 'Statistics', component: () => import('../views/admin/Statistics.vue') },
+      { path: 'attendance', name: 'Attendance', component: () => import('../views/admin/Attendance.vue') },
       { path: 'settings', name: 'Settings', component: () => import('../views/admin/Settings.vue') }
     ]
   },

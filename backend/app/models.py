@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Boolean, Date, Float, ForeignKey, Enum as SqlEnum, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, Date, Float, DateTime, ForeignKey, Enum as SqlEnum, UniqueConstraint
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from .database import Base
 import enum
 
@@ -95,3 +96,37 @@ class SystemConfig(Base):
     school_id = Column(Integer, ForeignKey("schools.id"), nullable=False)
     school = relationship("School")
     __table_args__ = (UniqueConstraint("key", "school_id", name="uq_config_key_school"),)
+
+class AttendanceStatus(str, enum.Enum):
+    present = "present"    # 出勤
+    late = "late"          # 迟到
+    excused = "excused"    # 请假
+    absent = "absent"      # 缺勤
+
+class AttendanceSession(Base):
+    __tablename__ = "attendance_sessions"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    class_id = Column(Integer, ForeignKey("classes.id"), nullable=False)
+    session_date = Column(Date, nullable=False)
+    label = Column(String(50), nullable=True)
+    recorder_id = Column(Integer, ForeignKey("admins.id"), nullable=True)
+    school_id = Column(Integer, ForeignKey("schools.id"), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
+
+    school = relationship("School")
+    class_ = relationship("Class")
+    recorder = relationship("Admin")
+    records = relationship("AttendanceRecord", back_populates="session", cascade="all, delete-orphan")
+
+class AttendanceRecord(Base):
+    __tablename__ = "attendance_records"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, ForeignKey("attendance_sessions.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    status = Column(SqlEnum(AttendanceStatus), nullable=False, default=AttendanceStatus.present)
+    remark = Column(String(200), nullable=True)
+    school_id = Column(Integer, ForeignKey("schools.id"), nullable=False)
+
+    school = relationship("School")
+    session = relationship("AttendanceSession", back_populates="records")
+    student = relationship("Student")

@@ -18,6 +18,11 @@
 
     <!-- ===== ② FUNCTION NAV ===== -->
     <nav class="func-nav">
+      <router-link to="/admin/attendance" class="func-card">
+        <span class="func-icon">📋</span>
+        <span class="func-title">出勤统计</span>
+        <span class="func-desc">日常签到 · 出勤率 · 缺勤预警</span>
+      </router-link>
       <router-link to="/admin/score-entry" class="func-card">
         <span class="func-icon">📝</span>
         <span class="func-title">成绩录入</span>
@@ -365,11 +370,12 @@ async function loadData() {
 
 /* ===== FUNCTION NAV ===== */
 .func-nav {
-  display:grid; grid-template-columns: repeat(4, 1fr);
+  display:grid; grid-template-columns: repeat(5, 1fr);
   gap:14px; margin-bottom:24px;
 }
-@media (max-width: 1000px) { .func-nav { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 500px)  { .func-nav { grid-template-columns: 1fr; } }
+@media (max-width: 1100px) { .func-nav { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 700px)  { .func-nav { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 400px)  { .func-nav { grid-template-columns: 1fr; } }
 
 .func-card {
   background: var(--bg-card); border:1px solid var(--border); border-radius:14px;

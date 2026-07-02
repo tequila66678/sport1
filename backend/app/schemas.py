@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 from .models import Gender, InputFormat
 
@@ -194,3 +194,63 @@ class SchoolCreate(BaseModel):
 
 class SwitchSchoolRequest(BaseModel):
     school_id: Optional[int] = None
+
+# Attendance
+class AttendanceRecordEntry(BaseModel):
+    student_id: int
+    status: str  # present/late/excused/absent
+    remark: Optional[str] = None
+
+class AttendanceSessionCreate(BaseModel):
+    class_id: int
+    session_date: date
+    label: Optional[str] = None
+    records: list[AttendanceRecordEntry]
+
+class AttendanceSessionUpdate(BaseModel):
+    label: Optional[str] = None
+    records: list[AttendanceRecordEntry]
+
+class AttendanceRecordOut(BaseModel):
+    id: int
+    student_id: int
+    student_name: str
+    student_gender: str
+    status: str
+    remark: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+class AttendanceSessionOut(BaseModel):
+    id: int
+    class_id: int
+    class_name: str
+    session_date: date
+    label: Optional[str] = None
+    recorder_name: str
+    created_at: Optional[datetime] = None
+    records: list[AttendanceRecordOut] = []
+    present_count: int = 0
+    late_count: int = 0
+    excused_count: int = 0
+    absent_count: int = 0
+    model_config = {"from_attributes": True}
+
+class StudentAttendanceStats(BaseModel):
+    student_id: int
+    student_name: str
+    class_name: str
+    total_sessions: int
+    present_count: int
+    late_count: int
+    excused_count: int
+    absent_count: int
+    attendance_rate: float
+    records: list[dict] = []
+
+class ClassAttendanceStats(BaseModel):
+    class_id: int
+    class_name: str
+    total_sessions: int
+    avg_attendance_rate: float
+    student_stats: list[StudentAttendanceStats] = []
+    warning_students: list[dict] = []
