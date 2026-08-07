@@ -25,7 +25,7 @@ def _maybe_filter(query, model, sid):
         return query.filter(model.school_id == sid)
     return query
 
-def _pick_best_in_window(scores, days=30):
+def _pick_best_in_window(scores, days=365):
     """Keep best earned_score per (student_id, event_id) within the last `days` days.
     Returns dict {(student_id, event_id): Score}"""
     cutoff = date.today() - timedelta(days=days)

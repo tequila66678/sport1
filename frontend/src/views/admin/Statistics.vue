@@ -4,7 +4,7 @@
     <h3 style="margin:8px 0 12px">统计分析</h3>
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
       <el-tab-pane label="年级对比" name="grade">
-        <div class="ctx-note"><span class="ctx-dot"></span> 近30天各项目最好成绩 · 中考总分 = 长跑(必考) + 其余最好2项</div>
+        <div class="ctx-note"><span class="ctx-dot"></span> 近一年各项目最好成绩 · 中考总分 = 长跑(必考) + 其余最好2项</div>
         <el-select v-model="gradeEventIds" multiple placeholder="选择项目（可选）" @change="loadGradeStats" style="width:100%;margin-bottom:12px" size="default" collapse-tags>
           <el-option v-for="e in events" :key="e.id" :label="e.name" :value="e.id" />
         </el-select>
@@ -132,7 +132,7 @@
                 </template>
               </el-table-column>
             </el-table>
-            <div class="table-hint">* 优先取近30天该项目最好成绩，若30天内未测试则取最近一次成绩</div>
+            <div class="table-hint">* 优先取近一年该项目最好成绩，若一年内未测试则取最近一次成绩</div>
           </div>
         </div>
         <div v-else class="empty-hint">请选择班级</div>
