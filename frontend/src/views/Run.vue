@@ -1,0 +1,289 @@
+<template>
+  <div class="run">
+    <!-- 登录 -->
+    <div v-if="!authed" class="center">
+      <div class="card">
+        <h2>🏃 长跑体测设备</h2>
+        <p class="sub">请用学校管理员账号登录</p>
+        <input v-model="user" placeholder="账号" autocomplete="username" />
+        <input v-model="pass" type="password" placeholder="密码" autocomplete="current-password" @keyup.enter="login" />
+        <button @click="login" :disabled="loggingIn">{{ loggingIn ? '登录中…' : '登录' }}</button>
+        <p v-if="loginErr" class="err">{{ loginErr }}</p>
+      </div>
+    </div>
+
+    <!-- 待开始 -->
+    <div v-else-if="mode === 'ready'" class="center">
+      <div class="card">
+        <h2>🏃 {{ schoolName }}</h2>
+        <p class="sub">长跑体测 · 已录入 {{ faces.length }} / {{ students.length }} 人</p>
+        <select v-model="eventId" class="big-select">
+          <option disabled value="">—— 选择本次项目 ——</option>
+          <option v-for="e in events" :key="e.id" :value="e.id">{{ e.name }}（{{ e.gender === 'M' ? '男' : '女' }}）</option>
+        </select>
+        <button class="big primary" :disabled="!eventId" @click="startBatch">▶ 开始批次</button>
+        <button class="ghost" @click="refreshSync">刷新名单</button>
+      </div>
+    </div>
+
+    <!-- 计时中 -->
+    <div v-else-if="mode === 'running'" class="run-split">
+      <div class="video-wrap">
+        <video ref="video" autoplay playsinline muted></video>
+        <canvas ref="overlay"></canvas>
+        <div v-if="flashText" class="flash">{{ flashText }}</div>
+      </div>
+      <div class="side">
+        <div class="timer">{{ timerText }}</div>
+        <div class="status">{{ statusText }}</div>
+        <button class="big danger" @click="endBatch">■ 结束批次</button>
+        <div class="manual">
+          <select v-model="manualSel" class="manual-select">
+            <option value="">识别不到 → 手动选择学生</option>
+            <option v-for="s in unrecordedStudents" :key="s.id" :value="s.id">
+              {{ s.name }} {{ s.class_name }}
+            </option>
+          </select>
+          <button @click="manualRecord">记下</button>
+        </div>
+        <div class="list">
+          <div v-for="(r, i) in records" :key="i" class="rec">
+            <span>{{ i + 1 }}. {{ r.name }}</span><b>{{ r.time }}</b>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 结束核对 -->
+    <div v-else class="center">
+      <div class="card wide">
+        <h2>本批结束 · 共 {{ records.length }} 人</h2>
+        <table>
+          <thead><tr><th>#</th><th>姓名</th><th>班级</th><th>成绩</th></tr></thead>
+          <tbody>
+            <tr v-for="(r, i) in records" :key="i">
+              <td>{{ i + 1 }}</td><td>{{ r.name }}</td><td>{{ r.class_name }}</td><td>{{ r.time }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <button class="big primary" @click="upload" :disabled="uploading">
+          {{ uploading ? '上传中…' : '上传成绩到 sport1' }}
+        </button>
+        <p v-for="(m, i) in messages" :key="i" :class="m.ok ? 'ok' : 'err'">{{ m.text }}</p>
+        <button class="ghost" @click="resetBatch">再来一批</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import api from '../api'
+import { loadFaceapi, ensureModels, detectOne, bestMatch } from '../faceutil'
+
+const THRESHOLD = 0.5
+const SYNC_KEY = 'run_sync_cache_v1'
+
+const authed = ref(!!localStorage.getItem('admin_token'))
+const user = ref(''); const pass = ref(''); const loggingIn = ref(false); const loginErr = ref('')
+const schoolName = ref(''); const events = ref([]); const students = ref([]); const faces = ref([])
+const eventId = ref('')
+const mode = ref('ready')           // ready | running | review
+const video = ref(null); const overlay = ref(null)
+const records = ref([])             // { id, name, class_name, time, timeMs }
+const timerText = ref('00:00'); const statusText = ref(''); const flashText = ref('')
+const manualSel = ref(''); const uploading = ref(false); const messages = ref([])
+let running = false, startMs = 0, timerId = null, faceapi = null
+let recordedIds = new Set(), loopTimer = null
+let wakeLock = null
+
+const studentsById = computed(() => new Map(students.value.map(s => [s.id, s])))
+const embeddingById = computed(() => new Map(faces.value.map(f => [f.id, f.embedding])))
+const unrecordedStudents = computed(() =>
+  students.value.filter(s => !recordedIds.has(s.id)))
+
+function fmt(ms) {
+  const s = Math.floor(ms / 1000)
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+}
+
+async function login() {
+  loginErr.value = ''
+  try {
+    const res = await api.post('/auth/login', { username: user.value, password: pass.value })
+    localStorage.setItem('admin_token', res.data.access_token)
+    localStorage.setItem('admin_info', JSON.stringify(res.data.admin))
+    authed.value = true
+    await refreshSync()
+  } catch (e) {
+    loginErr.value = '登录失败，请检查账号密码'
+  }
+}
+
+async function refreshSync() {
+  try {
+    const res = await api.get('/device/sync')
+    const data = res.data
+    localStorage.setItem(SYNC_KEY, JSON.stringify(data))
+    applySync(data)
+  } catch (e) {
+    const cache = localStorage.getItem(SYNC_KEY)
+    if (cache) applySync(JSON.parse(cache))
+    else alert('无法同步学生名单，请检查网络与账号')
+  }
+}
+
+function applySync(data) {
+  schoolName.value = data.school_name || ''
+  events.value = data.long_run_events || []
+  students.value = data.students || []
+  faces.value = data.face_embeddings || []
+}
+
+async function startBatch() {
+  running = true; records.value = []; recordedIds = new Set(); messages.value = []
+  startMs = performance.now(); mode.value = 'running'; statusText.value = '学生站到镜头前识别'
+  await openCamera()
+  loopTimer = setInterval(() => { if (running) timerText.value = fmt(performance.now() - startMs) }, 100)
+  recognizeLoop()
+  try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen') } catch (e) {}
+}
+
+async function openCamera() {
+  faceapi = await loadFaceapi()
+  await ensureModels()
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false })
+  const v = video.value
+  v.srcObject = stream
+  await v.play()
+  const c = overlay.value
+  c.width = v.videoWidth; c.height = v.videoHeight
+  c._ctx = c.getContext('2d')
+}
+
+async function recognizeLoop() {
+  if (!running) return
+  try {
+    const v = video.value, c = overlay.value, ctx = c._ctx
+    if (v.readyState >= 2) {
+      const res = await detectOne(faceapi, v)
+      ctx.clearRect(0, 0, c.width, c.height)
+      if (res) {
+        const sx = c.width / v.videoWidth, sy = c.height / v.videoHeight
+        ctx.strokeStyle = '#5ce38a'; ctx.lineWidth = 3
+        ctx.strokeRect(res.box.x * sx, res.box.y * sy, res.box.width * sx, res.box.height * sy)
+        const entries = Array.from(embeddingById.value.keys())
+          .filter(id => !recordedIds.has(id))
+          .map(id => ({ student: studentsById.value.get(id), embedding: embeddingById.value.get(id) }))
+          .filter(e => e.student)
+        const hit = bestMatch(res.descriptor, entries, THRESHOLD)
+        if (hit) {
+          const s = hit.student
+          const elapsed = performance.now() - startMs
+          recordOne(s, elapsed)
+          flashText.value = `✅ ${s.name} · ${fmt(elapsed)}`
+        } else {
+          flashText.value = '❓ 未识别，请靠近或手动选择'
+        }
+        setTimeout(() => { if (flashText.value) flashText.value = '' }, 2200)
+      }
+    }
+  } catch (e) {}
+  loopTimer = setTimeout(recognizeLoop, 180)
+}
+
+function recordOne(s, elapsedMs) {
+  if (recordedIds.has(s.id)) return
+  recordedIds.add(s.id)
+  records.value.push({ id: s.id, name: s.name, class_name: s.class_name || '', time: fmt(elapsedMs), timeMs: Math.round(elapsedMs) })
+  statusText.value = `已记录 ${records.value.length} 人`
+}
+
+function manualRecord() {
+  if (!manualSel.value) return
+  const s = studentsById.value.get(Number(manualSel.value))
+  if (!s || recordedIds.has(s.id)) return
+  recordOne(s, performance.now() - startMs)
+  manualSel.value = ''
+}
+
+function endBatch() {
+  if (!running) return
+  running = false
+  clearInterval(loopTimer)
+  if (wakeLock) { try { wakeLock.release() } catch (e) {} wakeLock = null }
+  mode.value = 'review'
+}
+
+function resetBatch() {
+  records.value = []; messages.value = []; eventId.value = ''
+  mode.value = 'ready'
+  const v = video.value
+  if (v && v.srcObject) { v.srcObject.getTracks().forEach(t => t.stop()); v.srcObject = null }
+}
+
+async function upload() {
+  uploading.value = true; messages.value = []
+  try {
+    const res = await api.post('/device/scores', {
+      event_id: Number(eventId.value),
+      scores: records.value.map(r => ({ student_id: r.id, time_ms: r.timeMs })),
+    })
+    const items = res.data
+    const failed = items.filter(i => !i.ok)
+    if (failed.length === 0) messages.value.push({ ok: true, text: `✅ 已上传 ${items.length} 条，全部成功` })
+    else {
+      for (const f of failed) {
+        const s = studentsById.value.get(f.student_id)
+        messages.value.push({ ok: false, text: `${s ? s.name : f.student_id} 上传失败：${f.reason}` })
+      }
+      messages.value.push({ ok: true, text: `成功 ${items.length - failed.length} 条` })
+    }
+  } catch (e) {
+    messages.value.push({ ok: false, text: '网络错误：上传失败，请重试（数据仍在列表中，可再点上传）' })
+  }
+  uploading.value = false
+}
+
+onMounted(() => { if (authed.value) refreshSync() })
+onUnmounted(() => {
+  running = false
+  clearInterval(loopTimer)
+  const v = video.value
+  if (v && v.srcObject) { v.srcObject.getTracks().forEach(t => t.stop()) }
+})
+</script>
+
+<style scoped>
+.run { min-height: 100vh; background: #020817; color: #eee; font-family: "Microsoft YaHei", system-ui; }
+.center { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+.card { background: #0f172a; border: 1px solid #1e293b; border-radius: 16px; padding: 32px 28px; width: 420px; max-width: 94vw; text-align: center; }
+.card.wide { width: 640px; }
+.card h2 { margin: 0 0 6px; font-size: 24px; }
+.sub { color: #94a3b8; margin: 0 0 18px; }
+input { display: block; width: 100%; box-sizing: border-box; margin: 8px 0; padding: 12px; font-size: 16px; border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #eee; }
+button { margin: 8px 4px; padding: 12px 18px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; color: #fff; }
+.big.primary { background: #16a34a; font-size: 22px; padding: 16px 28px; }
+.big.danger { background: #dc2626; font-size: 20px; padding: 14px 24px; width: 100%; }
+.ghost { background: #475569; }
+button:disabled { opacity: .4; }
+.err { color: #f87171; font-size: 13px; }
+.ok { color: #4ade80; font-size: 13px; }
+.big-select { display: block; width: 100%; margin: 8px 0; padding: 12px; font-size: 18px; border-radius: 8px; background: #1e293b; color: #eee; border: 1px solid #334155; }
+.run-split { min-height: 100vh; display: flex; gap: 16px; padding: 16px; }
+.video-wrap { position: relative; flex: 1; min-width: 300px; }
+video { width: 100%; border-radius: 12px; background: #000; }
+canvas { position: absolute; inset: 0; }
+.flash { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.75); padding: 12px 24px; border-radius: 12px; font-size: 30px; font-weight: bold; white-space: nowrap; }
+.side { width: 340px; display: flex; flex-direction: column; gap: 10px; }
+.timer { font-size: 72px; font-weight: bold; font-variant-numeric: tabular-nums; color: #4ade80; }
+.status { color: #facc15; }
+.manual { display: flex; gap: 6px; }
+.manual-select { flex: 1; padding: 10px; font-size: 15px; border-radius: 8px; background: #1e293b; color: #eee; border: 1px solid #334155; }
+.list { flex: 1; overflow-y: auto; }
+.rec { display: flex; justify-content: space-between; padding: 6px 10px; background: #0f172a; border-radius: 8px; margin-bottom: 4px; }
+.rec b { color: #4ade80; font-variant-numeric: tabular-nums; }
+table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 15px; }
+th, td { border: 1px solid #1e293b; padding: 6px 8px; }
+th { background: #1e293b; }
+</style>
