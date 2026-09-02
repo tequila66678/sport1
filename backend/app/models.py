@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Date, Float, DateTime, ForeignKey, Enum as SqlEnum, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, Date, Float, DateTime, ForeignKey, Text, Enum as SqlEnum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .database import Base
@@ -129,4 +129,14 @@ class AttendanceRecord(Base):
 
     school = relationship("School")
     session = relationship("AttendanceSession", back_populates="records")
+    student = relationship("Student")
+
+class FaceEmbedding(Base):
+    """学生人脸特征（128 维浮点数组，JSON 文本存储，跨 SQLite/PG 通用）。"""
+    __tablename__ = "face_embeddings"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, unique=True)
+    embedding = Column(Text, nullable=False)
+    school_id = Column(Integer, ForeignKey("schools.id"), nullable=False)
+    created_at = Column(DateTime, server_default=func.now())
     student = relationship("Student")
