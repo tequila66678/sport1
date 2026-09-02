@@ -36,7 +36,7 @@ JSON_FILE = os.path.join(BACKUP_DIR, "latest.json")
 
 # 核心业务表（按依赖顺序）
 ORDER = ["schools", "classes", "students", "sport_events", "scoring_standards",
-         "admins", "system_config", "scores", "attendance_sessions", "attendance_records"]
+         "admins", "system_config", "scores", "attendance_sessions", "attendance_records", "face_embeddings"]
 
 # 与 models.py 严格一致的建表语句（用于重建可部署的 SQLite）
 CREATE = {
@@ -50,6 +50,7 @@ CREATE = {
     "system_config": "CREATE TABLE system_config (id INTEGER NOT NULL PRIMARY KEY, key VARCHAR NOT NULL, value VARCHAR NOT NULL, school_id INTEGER NOT NULL, FOREIGN KEY(school_id) REFERENCES schools(id))",
     "attendance_sessions": "CREATE TABLE attendance_sessions (id INTEGER NOT NULL PRIMARY KEY, class_id INTEGER NOT NULL, session_date DATE NOT NULL, label VARCHAR(50), recorder_id INTEGER, school_id INTEGER NOT NULL, created_at DATETIME, FOREIGN KEY(class_id) REFERENCES classes(id), FOREIGN KEY(school_id) REFERENCES schools(id))",
     "attendance_records": "CREATE TABLE attendance_records (id INTEGER NOT NULL PRIMARY KEY, session_id INTEGER NOT NULL, student_id INTEGER NOT NULL, status VARCHAR NOT NULL, remark VARCHAR(200), school_id INTEGER NOT NULL, FOREIGN KEY(session_id) REFERENCES attendance_sessions(id), FOREIGN KEY(student_id) REFERENCES students(id), FOREIGN KEY(school_id) REFERENCES schools(id))",
+    "face_embeddings": "CREATE TABLE face_embeddings (id INTEGER NOT NULL PRIMARY KEY, student_id INTEGER NOT NULL UNIQUE, embedding TEXT NOT NULL, school_id INTEGER NOT NULL, created_at DATETIME, FOREIGN KEY(student_id) REFERENCES students(id), FOREIGN KEY(school_id) REFERENCES schools(id))",
 }
 
 
