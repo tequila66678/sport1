@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional, List
 from .models import Gender, InputFormat
 
 # Auth
@@ -254,3 +254,69 @@ class ClassAttendanceStats(BaseModel):
     avg_attendance_rate: float
     student_stats: list[StudentAttendanceStats] = []
     warning_students: list[dict] = []
+
+# ============ 体测设备 / 人脸录入 ============
+
+class StudentSync(BaseModel):
+    id: int
+    student_id: str
+    name: str
+    gender: str
+    class_name: Optional[str] = None
+
+
+class FaceSync(BaseModel):
+    id: int
+    embedding: List[float]
+
+
+class LongRunEvent(BaseModel):
+    id: int
+    name: str
+    gender: str
+
+
+class DeviceSyncOut(BaseModel):
+    school_id: int
+    school_name: str
+    students: List[StudentSync]
+    face_embeddings: List[FaceSync]
+    long_run_events: List[LongRunEvent]
+
+
+class DeviceScoreEntry(BaseModel):
+    student_id: int          # 数据库内部 id（与 /api/scores/batch 语义一致）
+    time_ms: int
+
+
+class DeviceScoreBatch(BaseModel):
+    event_id: int
+    test_date: Optional[date] = None
+    scores: List[DeviceScoreEntry]
+
+
+class DeviceScoreResult(BaseModel):
+    ok: bool
+    student_id: int
+    raw_value: Optional[str] = None
+    earned_score: Optional[int] = None
+    reason: Optional[str] = None
+
+
+class FaceEmbeddingOnly(BaseModel):
+    embedding: List[float]
+
+
+class FaceBatchEntry(BaseModel):
+    student_id: int
+    embedding: List[float]
+
+
+class FaceBatchWrite(BaseModel):
+    faces: List[FaceBatchEntry]
+
+
+class FaceResult(BaseModel):
+    ok: bool
+    student_id: int
+    reason: Optional[str] = None
