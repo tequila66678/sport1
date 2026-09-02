@@ -12,6 +12,7 @@ from .routers import config as config_router
 from .routers import student_portal as student_portal_router
 from .routers import schools as schools_router
 from .routers import attendance as attendance_router
+from .routers import device as device_router
 from .database import engine, Base
 from . import models
 
@@ -34,6 +35,7 @@ app.include_router(config_router.router)
 app.include_router(student_portal_router.router)
 app.include_router(schools_router.router)
 app.include_router(attendance_router.router)
+app.include_router(device_router.router)
 
 @app.on_event("startup")
 def startup():
