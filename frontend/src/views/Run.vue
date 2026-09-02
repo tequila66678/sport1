@@ -94,7 +94,7 @@ const BATCH_KEY = 'run_batch_v1'
 const authed = ref(!!localStorage.getItem('admin_token'))
 const user = ref(''); const pass = ref(''); const loggingIn = ref(false); const loginErr = ref('')
 const schoolName = ref(''); const events = ref([]); const students = ref([]); const faces = ref([])
-const eventId = ref('')
+const eventId = ref(''); const schoolId = ref('')
 const mode = ref('ready')           // ready | running | review
 const video = ref(null); const overlay = ref(null)
 const records = ref([])             // { id, name, class_name, time, timeMs }
@@ -128,20 +128,24 @@ function fmt(ms) {
 }
 
 function saveBatch() {
-  try { localStorage.setItem(BATCH_KEY, JSON.stringify({ eventId: eventId.value, records: records.value })) } catch (e) {}
+  try { localStorage.setItem(BATCH_KEY, JSON.stringify({ eventId: eventId.value, records: records.value, schoolId: schoolId.value })) } catch (e) {}
 }
 function loadSavedBatch() {
   const raw = localStorage.getItem(BATCH_KEY)
   if (!raw) return
   try {
     const b = JSON.parse(raw)
-    if (b && Array.isArray(b.records) && b.records.length) {
-      records.value = b.records
-      eventId.value = b.eventId || ''
-      recordedIds = new Set(b.records.map(r => r.id))
-      mode.value = 'review'
-      messages.value.push({ ok: false, text: `已恢复上次未上传批次（${b.records.length} 人）。核对后上传，或点“再来一批”清空。` })
+    if (!b || !Array.isArray(b.records) || !b.records.length) return
+    const ev = events.value.find(x => x.id === Number(b.eventId))
+    if ((b.schoolId && schoolId.value && b.schoolId !== schoolId.value) || !ev) {
+      try { localStorage.removeItem(BATCH_KEY) } catch (e) {}
+      return
     }
+    records.value = b.records
+    eventId.value = b.eventId || ''
+    recordedIds = new Set(b.records.map(r => r.id))
+    mode.value = 'review'
+    messages.value.push({ ok: false, text: `已恢复上次未上传批次（${b.records.length} 人）。核对后上传，或点“再来一批”清空。` })
   } catch (e) {}
 }
 
@@ -174,6 +178,7 @@ async function refreshSync() {
 
 function applySync(data) {
   schoolName.value = data.school_name || ''
+  schoolId.value = data.school_id || ''
   events.value = data.long_run_events || []
   students.value = data.students || []
   faces.value = data.face_embeddings || []
@@ -191,12 +196,14 @@ async function startBatch() {
   try {
     await openCamera()
   } catch (e) {
+    if (!running) return           // 期间已被结束/卸载：不覆盖 review
     running = false
     stopCamera()
     mode.value = 'ready'
     alert('无法启动摄像头/识别模型：' + (e && e.message ? e.message : e) + '\n请用 HTTPS 访问并允许摄像头权限')
     return
   }
+  if (!running) return             // openCamera 期间被结束：不再起定时器/循环
   displayTimer = setInterval(() => { if (running) timerText.value = fmt(performance.now() - startMs) }, 100)
   recognizeLoop()
   try { if (navigator.wakeLock) wakeLock = await navigator.wakeLock.request('screen') } catch (e) {}
@@ -206,11 +213,18 @@ async function openCamera() {
   faceapi = await loadFaceapi()
   await ensureModels()
   const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false })
+  // 异步间隙里可能已被「结束」或离开：迟到流立即释放，不上抛
+  if (!running || !video.value) {
+    stream.getTracks().forEach(t => t.stop())
+    return
+  }
   const v = video.value
   v.srcObject = stream
   await v.play()
   const c = overlay.value
-  c.width = v.videoWidth; c.height = v.videoHeight
+  if (!c) return
+  c.width = v.videoWidth
+  c.height = v.videoHeight
   c._ctx = c.getContext('2d')
 }
 
@@ -310,19 +324,28 @@ async function upload() {
       saveBatch()
     }
   } catch (e) {
-    if (e && e.response && e.response.status === 401) {
+    const st = e && e.response ? e.response.status : 0
+    if (st === 401) {
       messages.value.push({ ok: false, text: '登录已过期。请重新登录后继续上传（本批已保存在本机，重新登录会自动恢复）' })
       authed.value = false
       saveBatch()
+    } else if (st === 404) {
+      messages.value.push({ ok: false, text: '项目不存在或已失效，无法上传。请点“再来一批”重新开始。' })
+      try { localStorage.removeItem(BATCH_KEY) } catch (e) {}
+    } else if (st >= 400) {
+      messages.value.push({ ok: false, text: `上传被拒绝（HTTP ${st}），数据异常。请检查本批记录，或点“再来一批”重来。` })
+      saveBatch()
     } else {
-      messages.value.push({ ok: false, text: '网络错误：上传失败。本批已保存在本机，可刷新或稍后重新上传' })
+      messages.value.push({ ok: false, text: '网络错误：上传失败。本批已保存在本机，可稍后重试或“再来一批”' })
       saveBatch()
     }
   }
   uploading.value = false
 }
 
-onMounted(() => { if (authed.value) { refreshSync(); loadSavedBatch() } })
+onMounted(async () => {
+  if (authed.value) { await refreshSync(); loadSavedBatch() }
+})
 onUnmounted(() => {
   running = false
   clearInterval(displayTimer); clearTimeout(recTimer)
