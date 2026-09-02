@@ -168,6 +168,10 @@ def startup():
 frontend_web = os.path.join(os.path.dirname(__file__), "f2k3m8")
 app.mount("/assets", StaticFiles(directory=os.path.join(frontend_web, "assets")), name="assets")
 
+# Serve face-api.js library + models (loaded by the 体测 device page)
+face_web = os.path.join(os.path.dirname(__file__), "face_web")
+app.mount("/face", StaticFiles(directory=face_web), name="face")
+
 def _get_index_js():
     """Scan assets for the main index-*.js bundle (largest file)."""
     assets = os.path.join(frontend_web, "assets")
