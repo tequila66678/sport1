@@ -29,3 +29,76 @@ def test_sync_returns_school_scope(env):
     assert any(f["id"] == d["stu_f"] for f in r2["face_embeddings"])
     names = [e["name"] for e in r2["long_run_events"]]
     assert any("800" in n for n in names) and any("1000" in n for n in names)
+
+
+def _post_scores(client, h, d, event_key, stu, ms):
+    return client.post("/api/device/scores", headers=h, json={
+        "event_id": d[event_key],
+        "test_date": "2026-09-02",
+        "scores": [{"student_id": stu, "time_ms": ms}],
+    })
+
+
+def test_device_scores_ok(env):
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    r = _post_scores(client, h, d, "ev800", d["stu_f"], 178000)
+    assert r.status_code == 200
+    item = r.json()[0]
+    assert item["ok"] is True
+    assert item["raw_value"] == "2'58"
+    assert item["earned_score"] == 10  # 2'58 <= 3'25 → 满分
+
+
+def test_device_scores_parity_with_manual(env):
+    """设备上传与直接算分路径的 raw/得分一致（对拍）"""
+    from app.scoring import calculate_score
+    from app.database import SessionLocal
+    from app.models import SportEvent, ScoringStandard
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    r = client.post("/api/device/scores", headers=h, json={
+        "event_id": d["ev800"], "test_date": "2026-09-02",
+        "scores": [{"student_id": d["stu_f"], "time_ms": 178000}]})
+    device = r.json()[0]
+    db = SessionLocal()
+    ev = db.query(SportEvent).get(d["ev800"])
+    stds = db.query(ScoringStandard).filter(ScoringStandard.event_id == d["ev800"]).all()
+    expected = calculate_score("2'58", ev, stds, "F")
+    db.close()
+    assert device["earned_score"] == expected == 10
+
+
+def test_device_scores_gender_mismatch(env):
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    r = _post_scores(client, h, d, "ev1000", d["stu_f"], 178000)  # 女生跑1000米
+    item = r.json()[0]
+    assert item["ok"] is False
+    assert "性别" in item["reason"]
+
+
+def test_device_scores_unknown_student(env):
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    r = _post_scores(client, h, d, "ev800", 999999, 178000)
+    assert r.json()[0]["ok"] is False
+    assert "不存在" in r.json()[0]["reason"]
+
+
+def test_device_scores_upsert_dedup(env):
+    """同学生+同项目+同日重复上传 → 只保留一条记录（覆盖式 upsert，与手动录入一致）"""
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    _post_scores(client, h, d, "ev800", d["stu_f"], 178000)
+    _post_scores(client, h, d, "ev800", d["stu_f"], 183000)
+    from app.database import SessionLocal
+    from app.models import Score
+    db = SessionLocal()
+    n = db.query(Score).filter(Score.student_id == d["stu_f"],
+                               Score.event_id == d["ev800"]).count()
+    raw = db.query(Score).filter(Score.student_id == d["stu_f"],
+                                 Score.event_id == d["ev800"]).one().raw_value
+    db.close()
+    assert n == 1
+    assert raw == "3'03"  # 第二次覆盖了第一次
