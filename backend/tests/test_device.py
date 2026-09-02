@@ -102,3 +102,43 @@ def test_device_scores_upsert_dedup(env):
     db.close()
     assert n == 1
     assert raw == "3'03"  # 第二次覆盖了第一次
+
+
+def test_device_scores_cross_school_rejected(env):
+    """学校A 管理员向设备上报他校(学校B)学生成绩 → 该条 ok=False 且 reason 含「不属于」"""
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    r = client.post("/api/device/scores", headers=h, json={
+        "event_id": d["ev800"], "test_date": "2026-09-02",
+        "scores": [{"student_id": d["other_stu"], "time_ms": 178000}]})
+    assert r.status_code == 200
+    item = r.json()[0]
+    assert item["ok"] is False
+    assert "不属于" in item["reason"]
+
+
+def test_device_scores_time_ms_zero_rejected(env):
+    """time_ms <= 0 应被 schema 拒绝（422），不能进算分"""
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    r = client.post("/api/device/scores", headers=h, json={
+        "event_id": d["ev800"], "test_date": "2026-09-02",
+        "scores": [{"student_id": d["stu_f"], "time_ms": 0}]})
+    assert r.status_code == 422
+
+
+def test_device_scores_event_gender_both(env):
+    """gender=both 长跑项目：男女学生各自上报都能正常算分 ok=True"""
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    r = client.post("/api/device/scores", headers=h, json={
+        "event_id": d["ev800b"], "test_date": "2026-09-02",
+        "scores": [
+            {"student_id": d["stu_m"], "time_ms": 178000},  # 男 2'58
+            {"student_id": d["stu_f"], "time_ms": 183000},  # 女 3'03
+        ]})
+    assert r.status_code == 200
+    items = r.json()
+    assert len(items) == 2
+    assert all(i["ok"] is True for i in items)
+    assert all(i["earned_score"] == 10 for i in items)  # 均优于 3'25 → 满分

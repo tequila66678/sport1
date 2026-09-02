@@ -5,7 +5,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_admin
+from ..auth import get_school_admin
 from ..database import get_db
 from ..models import Admin, Class, School, SportEvent, Student, FaceEmbedding, Score, ScoringStandard
 from ..schemas import (DeviceSyncOut, StudentSync, FaceSync, LongRunEvent,
@@ -23,7 +23,7 @@ def _require_school_id(current: Admin) -> int:
 
 
 @router.get("/sync", response_model=DeviceSyncOut)
-def device_sync(db: Session = Depends(get_db), current: Admin = Depends(get_current_admin)):
+def device_sync(db: Session = Depends(get_db), current: Admin = Depends(get_school_admin)):
     sid = _require_school_id(current)
     school = db.query(School).get(sid)
     students = db.query(Student).join(Class, Student.class_id == Class.id) \
@@ -64,7 +64,7 @@ def _fmt_time(ms: int) -> str:
 
 @router.post("/scores", response_model=list[DeviceScoreResult])
 def device_scores(data: DeviceScoreBatch, db: Session = Depends(get_db),
-                  current: Admin = Depends(get_current_admin)):
+                  current: Admin = Depends(get_school_admin)):
     sid = _require_school_id(current)
     test_date = data.test_date or date.today()
     q = db.query(SportEvent).filter(SportEvent.id == data.event_id)
@@ -76,6 +76,9 @@ def device_scores(data: DeviceScoreBatch, db: Session = Depends(get_db),
     standards = db.query(ScoringStandard).filter(ScoringStandard.event_id == event.id).all()
     results: list[DeviceScoreResult] = []
     for entry in data.scores:
+        if entry.time_ms <= 0:
+            results.append(DeviceScoreResult(ok=False, student_id=entry.student_id, reason="成绩无效"))
+            continue
         student = db.query(Student).get(entry.student_id)
         if not student:
             results.append(DeviceScoreResult(ok=False, student_id=entry.student_id, reason="学生不存在"))
@@ -88,7 +91,12 @@ def device_scores(data: DeviceScoreBatch, db: Session = Depends(get_db),
                                              reason=f"性别与项目不符（该生为{'女' if student.gender.value=='F' else '男'}）"))
             continue
         raw_value = _fmt_time(entry.time_ms)
-        earned = calculate_score(raw_value, event, standards, student.gender.value)
+        try:
+            earned = calculate_score(raw_value, event, standards, student.gender.value)
+        except Exception:
+            results.append(DeviceScoreResult(ok=False, student_id=entry.student_id,
+                                             reason="算分异常（时间格式不匹配）"))
+            continue
         existing = db.query(Score).filter(
             Score.student_id == student.id,
             Score.event_id == event.id,

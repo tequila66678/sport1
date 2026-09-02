@@ -19,7 +19,8 @@ from app.auth import hash_password, create_jwt
 
 
 def seed_data(db: Session) -> dict:
-    """构造：1 学校 / 2 班 / 男女生各 1 / 800米(F)+1000米(M) 各带标准 / 1 学校管理员。返回关键 id。"""
+    """构造：2 学校 / 学校A 两班男女各 1 + 800米(F)+1000米(M)+800米(both 通用) 各带标准 /
+    学校B 1 他校女生 / 学校A 1 学校管理员。返回关键 id。"""
     school = School(name="测试学校")
     db.add(school); db.flush()
     cls_f = Class(grade="2027届", name="1班", school_id=school.id)
@@ -32,21 +33,34 @@ def seed_data(db: Session) -> dict:
 
     ev800 = SportEvent(name="800米跑", gender=Gender.F, higher_better=False, unit="分'秒", input_format=InputFormat.time_ms, sort_order=1, school_id=school.id)
     ev1000 = SportEvent(name="1000米跑", gender=Gender.M, higher_better=False, unit="分'秒", input_format=InputFormat.time_ms, sort_order=1, school_id=school.id)
-    db.add_all([ev800, ev1000]); db.flush()
+    ev800b = SportEvent(name="800米跑（男女通用）", gender=Gender.both, higher_better=False, unit="分'秒", input_format=InputFormat.time_ms, sort_order=1, school_id=school.id)
+    db.add_all([ev800, ev1000, ev800b]); db.flush()
     db.add_all([
         ScoringStandard(event_id=ev800.id, gender=Gender.F, score=10, standard_value="3'25"),
         ScoringStandard(event_id=ev800.id, gender=Gender.F, score=1, standard_value="4'55"),
         ScoringStandard(event_id=ev1000.id, gender=Gender.M, score=10, standard_value="3'40"),
         ScoringStandard(event_id=ev1000.id, gender=Gender.M, score=1, standard_value="5'10"),
+        ScoringStandard(event_id=ev800b.id, gender=Gender.both, score=10, standard_value="3'25"),
+        ScoringStandard(event_id=ev800b.id, gender=Gender.both, score=1, standard_value="4'55"),
     ])
 
     admin = Admin(username="dev", password_hash=hash_password("pw"), role="school_admin",
                   display_name="测试老师", school_id=school.id)
     db.add(admin); db.flush()
+
+    # 学校B：跨校拒绝 / 跨校录脸拒绝场景
+    school_b = School(name="他校")
+    db.add(school_b); db.flush()
+    cls_b = Class(grade="2028届", name="1班", school_id=school_b.id)
+    db.add(cls_b); db.flush()
+    stu_b = Student(student_id="280101", name="赵他", gender=Gender.F, class_id=cls_b.id, password_hash=hash_password("123456"))
+    db.add(stu_b); db.flush()
+
     db.commit()
     return {"school_id": school.id, "cls_f": cls_f.id, "cls_m": cls_m.id,
             "stu_f": stu_f.id, "stu_m": stu_m.id, "stu_f_sid": stu_f.student_id,
-            "ev800": ev800.id, "ev1000": ev1000.id, "admin": admin.id}
+            "ev800": ev800.id, "ev1000": ev1000.id, "ev800b": ev800b.id, "admin": admin.id,
+            "other_school_id": school_b.id, "other_stu": stu_b.id}
 
 
 def auth_headers(admin_db_id: int, school_id: int) -> dict:

@@ -33,3 +33,30 @@ def test_batch_face_mixed(env):
     items = r.json()
     assert items[0]["ok"] is True
     assert items[1]["ok"] is False
+
+
+def test_put_face_cross_school_rejected(env):
+    """学校A 管理员不能给学校B 学生录脸 → 404"""
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    r = client.put(f"/api/faces/{d['other_stu']}", headers=h, json={"embedding": [0.1] * 128})
+    assert r.status_code == 404
+
+
+def test_delete_student_cascades_face_embedding(env):
+    """删除学生应级联删除其 FaceEmbedding（不留孤儿行 / 不触发 FK IntegrityError）"""
+    import json
+    from app.database import SessionLocal
+    from app.models import FaceEmbedding
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    db = SessionLocal()
+    db.add(FaceEmbedding(student_id=d["stu_f"], embedding=json.dumps([0.0] * 128),
+                         school_id=d["school_id"]))
+    db.commit(); db.close()
+    r = client.delete(f"/api/students/{d['stu_f']}", headers=h)
+    assert r.status_code == 200
+    db = SessionLocal()
+    n = db.query(FaceEmbedding).filter(FaceEmbedding.student_id == d["stu_f"]).count()
+    db.close()
+    assert n == 0

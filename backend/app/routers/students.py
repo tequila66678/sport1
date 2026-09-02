@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..models import Student, Class, Admin, Score
+from ..models import Student, Class, Admin, Score, FaceEmbedding
 from ..schemas import StudentCreate, StudentOut, StudentBatchUpdate
 from ..auth import get_current_admin, require_school, hash_password
 import openpyxl
@@ -111,6 +111,7 @@ def delete_student(student_id: int, db: Session = Depends(get_db), current: Admi
     if not s:
         raise HTTPException(status_code=404, detail="学生不存在")
     db.query(Score).filter(Score.student_id == student_id).delete()
+    db.query(FaceEmbedding).filter(FaceEmbedding.student_id == student_id).delete()
     db.delete(s)
     db.commit()
     return {"ok": True}
@@ -195,6 +196,7 @@ def batch_delete_students(
     if not ids:
         raise HTTPException(status_code=400, detail="请选择要删除的学生")
     db.query(Score).filter(Score.student_id.in_(ids)).delete(synchronize_session=False)
+    db.query(FaceEmbedding).filter(FaceEmbedding.student_id.in_(ids)).delete(synchronize_session=False)
     db.query(Student).filter(Student.id.in_(ids)).delete(synchronize_session=False)
     db.commit()
     return {"ok": True, "deleted": len(ids)}

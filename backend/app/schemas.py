@@ -286,7 +286,7 @@ class DeviceSyncOut(BaseModel):
 
 class DeviceScoreEntry(BaseModel):
     student_id: int          # 数据库内部 id（与 /api/scores/batch 语义一致）
-    time_ms: int
+    time_ms: int = Field(ge=1)
 
 
 class DeviceScoreBatch(BaseModel):
