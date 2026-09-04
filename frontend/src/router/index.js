@@ -37,6 +37,11 @@ const routes = [
     name: 'StudentScores',
     component: () => import('../views/student/Scores.vue')
   },
+  {
+    path: '/run',
+    name: 'Run',
+    component: () => import('../views/Run.vue')
+  },
   { path: '/', redirect: '/admin/login' },
   { path: '/:pathMatch(.*)*', redirect: '/admin/login' }
 ]

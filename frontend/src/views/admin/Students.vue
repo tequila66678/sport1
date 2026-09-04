@@ -17,6 +17,10 @@
           <span class="stat-num">{{ classes.length }}</span>
           <span class="stat-label">班级数</span>
         </div>
+        <div class="stat-item">
+          <span class="stat-num">{{ faceEnrolled }}</span>
+          <span class="stat-label">已录人脸</span>
+        </div>
       </div>
     </div>
 
@@ -33,8 +37,10 @@
         <button class="action-btn" @click="downloadTemplate">📥 模板</button>
         <button class="action-btn" @click="showImport = true">📊 导入</button>
         <button class="action-btn" @click="showBatchEdit = true">✎ 批量</button>
+        <button class="action-btn" @click="faceDirInput.click()">📷 录人脸(批量)</button>
         <button class="action-btn danger" @click="batchDelete" :disabled="!selectedIds.length">🗑 删除({{ selectedIds.length }})</button>
       </div>
+      <input ref="faceDirInput" type="file" webkitdirectory directory style="display:none" @change="onPickFaceDir" />
     </div>
 
     <!-- Desktop table in glass card -->
@@ -45,11 +51,17 @@
         <el-table-column label="性别" width="50">
           <template #default="{ row }">{{ row.gender === 'M' ? '男' : '女' }}</template>
         </el-table-column>
+        <el-table-column label="人脸" width="76">
+          <template #default="{ row }">
+            <span class="face-chip" :class="hasFace(row.id) ? 'on' : ''">{{ hasFace(row.id) ? '✓ 已录' : '未录' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="班级">
           <template #default="{ row }">{{ row.class_grade }}{{ row.class_name }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="130">
+        <el-table-column label="操作" width="200">
           <template #default="{ row }">
+            <el-button text type="warning" size="small" @click="startFaceCapture(row)">📷 录脸</el-button>
             <el-button text type="primary" size="small" @click="editStudent(row)">编辑</el-button>
             <el-button text type="danger" size="small" @click="deleteStudent(row)">删除</el-button>
           </template>
@@ -69,11 +81,14 @@
       <div v-for="s in students" :key="s.id" class="student-card">
         <el-checkbox :model-value="selectedIds.includes(s.id)" @change="toggleSelect(s.id)" style="margin-right:8px" />
         <div class="sc-info">
-          <div class="sc-name">{{ s.name }} <span class="sc-gender">{{ s.gender === 'M' ? '男' : '女' }}</span></div>
+          <div class="sc-name">{{ s.name }} <span class="sc-gender">{{ s.gender === 'M' ? '男' : '女' }}</span>
+            <span class="face-chip" :class="hasFace(s.id) ? 'on' : ''">{{ hasFace(s.id) ? '✓已录' : '未录' }}</span>
+          </div>
           <div class="sc-id">{{ s.student_id }}</div>
           <div class="sc-class">{{ s.class_grade }}{{ s.class_name }}</div>
         </div>
         <div class="sc-actions">
+          <el-button text type="warning" size="small" @click="startFaceCapture(s)">📷录脸</el-button>
           <el-button text type="primary" size="small" @click="editStudent(s)">编辑</el-button>
           <el-button text type="danger" size="small" @click="deleteStudent(s)">删除</el-button>
         </div>
@@ -155,13 +170,49 @@
         <el-button type="primary" @click="addStudent" style="width:100%">确认新增</el-button>
       </el-form>
     </el-dialog>
+
+    <!-- 逐人录脸弹窗 -->
+    <el-dialog v-model="showFaceCap" title="📷 人脸录入" :width="isMobile ? '100%' : '460px'" @opened="openFaceCam" @closed="closeFaceCam">
+      <div v-if="faceTarget" class="face-cap-info">
+        正在给 <b>{{ faceTarget.name }}</b>（{{ faceTarget.class_name }} {{ faceTarget.student_id }}）录人脸
+        <div class="face-cap-tip">请让学生正对镜头，光线充足</div>
+      </div>
+      <video ref="camEl" autoplay playsinline muted></video>
+      <div class="face-cap-btns">
+        <button class="action-btn primary" :disabled="capSaving" @click="captureAndSave">📸 确认这张照片</button>
+        <button class="action-btn" @click="showFaceCap = false">取消</button>
+      </div>
+      <p v-if="capMsg" class="face-cap-msg" :class="capMsgOk ? 'ok' : 'err'">{{ capMsg }}</p>
+    </el-dialog>
+
+    <!-- 批量导入人脸照片 -->
+    <el-dialog v-model="showFaceBatch" title="📷 批量导入人脸照片" :width="isMobile ? '100%' : '560px'" :close-on-click-modal="false">
+      <div class="face-batch-tip">
+        ① 照片文件名 <b>必须 = 学号.jpg</b>（例：<code>270101.jpg</code>）——系统按文件名找学生，不认姓名<br>
+        ② 照片在浏览器本地处理，<b>原图不会上传</b>，只提取人脸特征保存
+      </div>
+      <div v-if="!faceBatchFiles.length" style="text-align:center;padding:12px">
+        <button class="action-btn primary" @click="faceDirInput.click()">选择照片文件夹</button>
+      </div>
+      <template v-else>
+        <p class="face-batch-picked">已选 <b>{{ faceBatchFiles.length }}</b> 张照片<template v-if="faceWriting">，正在识别 {{ faceBatchDone }}/{{ faceBatchFiles.length }}…</template></p>
+        <div class="face-batch-actions">
+          <button class="action-btn primary" :disabled="faceWriting" @click="runFaceBatch">开始导入</button>
+          <button class="action-btn" :disabled="faceWriting" @click="faceBatchFiles = []; faceBatchLog = []">重新选择</button>
+        </div>
+        <div class="face-log">
+          <div v-for="(m, i) in faceBatchLog" :key="i" :class="m.ok ? 'ok' : 'err'">{{ m.text }}</div>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../api'
+import { loadFaceapi, ensureModels, detectOne } from '../../faceutil'
 
 const students = ref([])
 const classes = ref([])
@@ -183,11 +234,160 @@ const showAdd = ref(false)
 const newStudent = ref({ student_id: '', name: '', gender: 'M', class_id: null })
 const isMobile = ref(window.innerWidth < 768)
 
+// ===== 人脸录入 =====
+const allStudents = ref([])                 // 全校名单（来自 /device/sync，含学号）
+const faceIds = ref(new Set())              // 已录人脸的内部 id 集合
+const showFaceCap = ref(false)
+const faceTarget = ref(null)                // 正在录脸的那个学生
+const camEl = ref(null)
+const capMsg = ref(''); const capMsgOk = ref(false); const capSaving = ref(false)
+const faceDirInput = ref(null)
+const showFaceBatch = ref(false)
+const faceBatchFiles = ref([])
+const faceWriting = ref(false)
+const faceBatchDone = ref(0)
+const faceBatchLog = ref([])
+let faceapi = null, camStream = null
+
+const faceEnrolled = computed(() => faceIds.value.size)
+const hasFace = id => faceIds.value.has(id)
+
+async function readyFace() {
+  if (!faceapi) {
+    faceapi = await loadFaceapi()
+    await ensureModels()
+  }
+  return faceapi
+}
+
+async function loadSchoolFace() {
+  try {
+    const res = await api.get('/device/sync')
+    allStudents.value = res.data.students || []
+    faceIds.value = new Set((res.data.face_embeddings || []).map(f => f.id))
+  } catch (e) { /* 非学校管理员时静默 */ }
+}
+
+async function startFaceCapture(row) {
+  faceTarget.value = row
+  capMsg.value = ''; capMsgOk.value = false; capSaving.value = false
+  showFaceCap.value = true
+}
+
+async function openFaceCam() {
+  try {
+    await readyFace()
+  } catch (e) { capMsg.value = '人脸识别组件加载失败'; capMsgOk.value = false; return }
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false })
+    const v = camEl.value
+    if (v) { v.srcObject = camStream; await v.play() }
+  } catch (e) {
+    capMsg.value = '无法打开摄像头，请检查浏览器权限：' + ((e && e.message) || e)
+    capMsgOk.value = false
+  }
+}
+
+async function captureAndSave() {
+  const v = camEl.value
+  if (!v || !v.videoWidth) { capMsg.value = '摄像头还没准备好，请稍等再试'; capMsgOk.value = false; return }
+  const c = document.createElement('canvas')
+  c.width = v.videoWidth; c.height = v.videoHeight
+  c.getContext('2d').drawImage(v, 0, 0)
+  let res
+  try { res = await detectOne(faceapi, c) } catch (e) {}
+  if (!res) { capMsg.value = '未检测到人脸，请正对镜头'; capMsgOk.value = false; return }
+  capSaving.value = true
+  try {
+    await api.put(`/faces/${faceTarget.value.id}`, { embedding: Array.from(res.descriptor) })
+    faceIds.value = new Set([...faceIds.value, faceTarget.value.id])
+    capMsg.value = '✓ 已录入'; capMsgOk.value = true
+    ElMessage.success(`${faceTarget.value.name} 人脸已保存`)
+    showFaceCap.value = false
+  } catch (e) {
+    capMsg.value = '保存失败：' + ((e.response && e.response.data && e.response.data.detail) || e.message)
+    capMsgOk.value = false
+  } finally {
+    capSaving.value = false
+  }
+}
+
+function closeFaceCam() {
+  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null }
+  capMsg.value = ''
+}
+
+function onPickFaceDir(e) {
+  const files = Array.from(e.target.files || [])
+  e.target.value = ''
+  const imgs = files.filter(f => /\.(jpe?g|png)$/i.test(f.name))
+  if (!imgs.length) { ElMessage.warning('文件夹里没找到照片'); return }
+  faceBatchFiles.value = imgs
+  faceBatchLog.value = []; faceBatchDone.value = 0
+  showFaceBatch.value = true
+}
+
+function readImageAsCanvas(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      const maxSide = 640
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height))
+      const c = document.createElement('canvas')
+      c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale)
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height)
+      URL.revokeObjectURL(url)
+      resolve(c)
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('图片读取失败')) }
+    img.src = url
+  })
+}
+
+async function runFaceBatch() {
+  const list = faceBatchFiles.value
+  if (!list.length || faceWriting.value) return
+  try { await readyFace() } catch (e) { ElMessage.error('人脸识别组件加载失败'); return }
+  faceWriting.value = true; faceBatchDone.value = 0; faceBatchLog.value = []
+  const results = []
+  for (const p of list) {
+    const sid6 = p.name.replace(/\.[^.]+$/, '').trim()
+    const st = allStudents.value.find(s => s.student_id === sid6)
+    if (!st) { faceBatchLog.value.push({ ok: false, text: `${p.name}：学号 ${sid6} 不在学生名单` }); faceBatchDone.value++; continue }
+    try {
+      const canvas = await readImageAsCanvas(p.file)
+      const res = await detectOne(faceapi, canvas)
+      if (!res) { faceBatchLog.value.push({ ok: false, text: `${p.name}：照片里未检测到人脸` }); faceBatchDone.value++; continue }
+      results.push({ student_id: st.id, embedding: Array.from(res.descriptor) })
+    } catch (err) {
+      faceBatchLog.value.push({ ok: false, text: `${p.name}：${err.message}` })
+    }
+    faceBatchDone.value++
+  }
+  if (results.length) {
+    try {
+      const r = await api.post('/faces/batch', { faces: results })
+      r.data.forEach(item => {
+        const st = allStudents.value.find(s => s.id === item.student_id)
+        faceBatchLog.value.push({ ok: item.ok, text: `${st ? st.name : item.student_id} ${item.ok ? '✓ 已录入' : '✗ ' + (item.reason || '失败')}` })
+      })
+      await loadSchoolFace()
+    } catch (e) {
+      faceBatchLog.value.push({ ok: false, text: '写入请求失败：' + ((e && e.message) || e) })
+    }
+  }
+  faceWriting.value = false
+}
+
 onMounted(async () => {
   const res = await api.get('/events/classes')
   classes.value = res.data
   loadStudents()
+  loadSchoolFace()
 })
+
+onUnmounted(closeFaceCam)
 
 async function loadStudents() {
   const params = { page: page.value, page_size: 50 }
@@ -368,6 +568,33 @@ async function deleteStudent(row) {
 .students-page :deep(.el-upload-dragger) { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.12); }
 .students-page :deep(.el-upload__text) { color: #8ea0c8; }
 .students-page :deep(.el-progress-bar__outer) { background: rgba(255,255,255,0.06); }
+
+/* Face chip */
+.face-chip {
+  display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 20px;
+  background: rgba(148,163,184,0.15); color: #94a3b8; margin-left: 4px; vertical-align: 1px;
+}
+.face-chip.on { background: rgba(74,222,128,0.16); color: #4ade80; }
+
+/* Face capture dialog */
+.face-cap-info { color: #e0e8f8; margin-bottom: 4px; font-size: 14px; }
+.face-cap-info b { color: #fff; }
+.face-cap-tip { color: #7d8fb9; font-size: 12px; margin-top: 2px; }
+video { width: 100%; max-width: 460px; border-radius: 12px; background: #000; margin: 8px auto 0; display: block; }
+.face-cap-btns { text-align: center; margin: 10px 0 4px; }
+.face-cap-msg { text-align: center; font-size: 14px; margin: 6px 0 0; }
+.face-cap-msg.ok { color: #4ade80; } .face-cap-msg.err { color: #f87171; }
+
+/* Batch import */
+.face-batch-tip {
+  color: #cbd5f0; font-size: 13px; background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1); padding: 10px 12px; border-radius: 10px; margin-bottom: 8px;
+}
+.face-batch-tip code { color: #a0b8ff; }
+.face-batch-picked { color: #e0e8f8; margin: 8px 0 0; }
+.face-batch-actions { margin: 8px 0; display: flex; gap: 8px; }
+.face-log { max-height: 240px; overflow-y: auto; font-size: 13px; line-height: 1.7; border-top: 1px solid rgba(255,255,255,0.07); padding-top: 8px; }
+.face-log .ok { color: #4ade80; } .face-log .err { color: #f87171; }
 
 /* Mobile cards */
 .student-card {
