@@ -81,9 +81,11 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import api from '../api'
-import { loadFaceapi, ensureModels, detectOne, bestMatch } from '../faceutil'
+import { loadFaceapi, ensureModels, detectOne, bestMatch, rankMatches } from '../faceutil'
 
-const THRESHOLD = 0.5
+const THRESHOLD = 0.45      // 人脸匹配欧氏距离上限
+const MARGIN = 0.08         // 第一名须比第二名明显更近，否则视为不确定
+const CONFIRM_FRAMES = 3    // 需连续 N 帧判为同一人，才记成绩
 const SYNC_KEY = 'run_sync_cache_v1'
 const BATCH_KEY = 'run_batch_v1'
 
@@ -99,6 +101,10 @@ const manualId = ref(''); const uploading = ref(false); const messages = ref([])
 const uploadRes = ref({})           // sid -> {ok, raw_value?, earned_score?, reason?}
 let running = false, startMs = 0, displayTimer = null, recTimer = null, faceapi = null, wakeLock = null
 let recordedIds = new Set()
+let confirm = { id: null, frames: 0 }    // 连续帧确认：同一 id 连续 CONFIRM_FRAMES 帧才记录
+let locked = false                       // 记录成功后锁定，直到画面换人/清空，防一人连记多人
+let lastNoFace = 0                       // 连续无脸帧数，用于解锁
+let lockGap = 0                          // 锁定后镜头前“不再是刚记录的人”的连续帧数，攒够 CONFIRM_FRAMES 即解锁
 
 const studentsById = computed(() => new Map(students.value.map(s => [s.id, s])))
 const studentsByNo = computed(() => new Map(students.value.map(s => [s.student_id, s])))
@@ -187,6 +193,7 @@ function stopCamera() {
 
 async function startBatch() {
   running = true; records.value = []; recordedIds = new Set(); messages.value = []; uploadRes.value = {}
+  confirm = { id: null, frames: 0 }; locked = false; lastNoFace = 0; lockGap = 0
   startMs = performance.now(); mode.value = 'running'
   statusText.value = '男生→1000米 · 女生→800米，站到镜头前识别'
   try {
@@ -234,33 +241,83 @@ async function recognizeLoop() {
   if (!running) return               // 结束瞬间的在途帧：丢弃，不再追加
   const c = overlay.value, ctx = c._ctx, v = video.value
   if (ctx) ctx.clearRect(0, 0, c.width, c.height)
-  if (res && ctx) {
-    const sx = c.width / v.videoWidth, sy = c.height / v.videoHeight
-    ctx.strokeStyle = '#5ce38a'; ctx.lineWidth = 3
-    ctx.strokeRect(res.box.x * sx, res.box.y * sy, res.box.width * sx, res.box.height * sy)
-    const candidates = students.value
-      .filter(s => embeddingById.value.has(s.id))
-    // 第一遍：只在「未记录」学生里找 → 命中即记成绩（项目按性别自动定）
-    const pending = candidates
-      .filter(s => !recordedIds.has(s.id))
-      .map(s => ({ student: s, embedding: embeddingById.value.get(s.id) }))
-    const hit = bestMatch(res.descriptor, pending, THRESHOLD)
-    if (hit) {
-      const elapsed = performance.now() - startMs
-      if (recordOne(hit.student, elapsed)) {
-        flashNow(`✅ ${hit.student.name} · ${fmt(elapsed)}`)
+  const candidates = students.value
+    .filter(s => embeddingById.value.has(s.id))
+  const marked = (ids) => candidates
+    .filter(s => ids.has(s.id))
+    .map(s => ({ student: s, embedding: embeddingById.value.get(s.id) }))
+
+  if (!res || !ctx) {
+    // 无脸/画布未就绪：连续无脸达到 N 帧才解锁，防止一个学生录完立即连录下一个
+    lastNoFace++
+    confirm = { id: null, frames: 0 }
+    if (lastNoFace >= 3) locked = false
+    if (running) recTimer = setTimeout(recognizeLoop, 180)
+    return
+  }
+
+  const sx = c.width / v.videoWidth, sy = c.height / v.videoHeight
+  ctx.strokeStyle = '#5ce38a'; ctx.lineWidth = 3
+  ctx.strokeRect(res.box.x * sx, res.box.y * sy, res.box.width * sx, res.box.height * sy)
+  lastNoFace = 0
+
+  // 已锁定时：①刚录完的人还在镜头前 → 提示已记录；②旧人已走、来了新面孔 → 仍不记录，等无脸空档解锁
+  if (locked) {
+    const again = bestMatch(res.descriptor, marked(recordedIds), THRESHOLD)
+    if (again) {
+      flashNow(`⚠️ ${again.student.name} 本批已记录`)
+      lockGap = 0
+    } else {
+      // 镜头前的脸不再匹配任何已记录学生 → 说明旧人已走、新人/空位出现
+      lockGap++
+      flashNow(lockGap >= CONFIRM_FRAMES ? '✅ 下一位可上前' : '⏳ 请下一位上前')
+      if (lockGap >= CONFIRM_FRAMES) { locked = false; lockGap = 0 }
+    }
+    if (running) recTimer = setTimeout(recognizeLoop, 180)
+    return
+  }
+
+  // 正常识别：①只在未记录学生里找；②连续 N 帧同一人 + 与第二名拉开余量才记录
+  const pendingArr = candidates
+    .filter(s => !recordedIds.has(s.id))
+    .map(s => ({ student: s, embedding: embeddingById.value.get(s.id) }))
+  const ranked = rankMatches(res.descriptor, pendingArr)
+  const best = ranked[0]
+
+  if (best && best.dist < THRESHOLD) {
+    const second = ranked[1]
+    const marginOk = !second || (best.dist + MARGIN <= second.dist)
+    if (!marginOk) {
+      // 第一名与第二名太接近：分不清，宁可不记
+      confirm = { id: null, frames: 0 }
+      flashNow('🤔 与多名学生相似，请靠近镜头')
+    } else if (confirm.id === best.student.id) {
+      confirm.frames++
+      if (confirm.frames >= CONFIRM_FRAMES) {
+        const elapsed = performance.now() - startMs
+        if (recordOne(best.student, elapsed)) {
+          confirm = { id: null, frames: 0 }
+          locked = true          // 记录成功 → 锁定，直到无脸 3 帧解锁
+          flashNow(`✅ ${best.student.name} · ${fmt(elapsed)}`)
+        } else {
+          confirm = { id: null, frames: 0 }
+          flashNow('⚠️ 该生无 800/1000 项目，无法记录')
+        }
       } else {
-        flashNow('⚠️ 该生无 800/1000 项目，无法记录')
+        statusText.value = `已确认 ${best.student.name} …（连续 ${confirm.frames}/${CONFIRM_FRAMES} 帧）`
       }
     } else {
-      // 第二遍：匹配「已记录」学生 → 提示已记录，不重复计
-      const done = candidates
-        .filter(s => recordedIds.has(s.id))
-        .map(s => ({ student: s, embedding: embeddingById.value.get(s.id) }))
-      const again = bestMatch(res.descriptor, done, THRESHOLD)
-      flashNow(again
-        ? `⚠️ ${again.student.name} 本批已记录`
-        : '❓ 未识别，请靠近或手动输学号')
+      confirm = { id: best.student.id, frames: 1 }
+      statusText.value = `确认中：${best.student.name} …`
+    }
+  } else {
+    // 无未记录命中：可能是已记录学生又出现，或纯未识别
+    confirm = { id: null, frames: 0 }
+    const again = bestMatch(res.descriptor, marked(recordedIds), THRESHOLD)
+    if (again) {
+      flashNow(`⚠️ ${again.student.name} 本批已记录`)
+    } else {
+      flashNow('❓ 未识别，请靠近或手动输学号')
     }
   }
   if (running) recTimer = setTimeout(recognizeLoop, 180)
@@ -288,6 +345,7 @@ function manualRecord() {
   if (recordedIds.has(s.id)) { flashNow(`⚠️ ${s.name} 本批已记录`); manualId.value = ''; return }
   const elapsed = performance.now() - startMs
   if (recordOne(s, elapsed)) {
+    locked = true; lockGap = 0   // 手输记录同样锁到脸离开，防同一人再被自动识别成别人
     flashNow(`✅ 手动 ${s.name} · ${fmt(elapsed)}`)
   } else {
     flashNow('⚠️ 该生无 800/1000 项目，无法记录')

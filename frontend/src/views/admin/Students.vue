@@ -178,8 +178,13 @@
         <div class="face-cap-tip">请让学生正对镜头，光线充足</div>
       </div>
       <video ref="camEl" autoplay playsinline muted></video>
+      <div class="face-cap-live" :class="capReady ? 'ok' : 'err'">
+        <span v-if="capReady">✅ 人脸清晰，大小合适，可以保存</span>
+        <span v-else-if="capRatio > 0">👆 人脸太小（{{ Math.round(capRatio * 100) }}%），请靠近镜头</span>
+        <span v-else>📷 正对镜头等待识别…</span>
+      </div>
       <div class="face-cap-btns">
-        <button class="action-btn primary" :disabled="capSaving" @click="captureAndSave">📸 确认这张照片</button>
+        <button class="action-btn primary" :disabled="capSaving || !capReady" @click="captureAndSave">📸 确认保存</button>
         <button class="action-btn" @click="showFaceCap = false">取消</button>
       </div>
       <p v-if="capMsg" class="face-cap-msg" :class="capMsgOk ? 'ok' : 'err'">{{ capMsg }}</p>
@@ -248,6 +253,11 @@ const faceWriting = ref(false)
 const faceBatchDone = ref(0)
 const faceBatchLog = ref([])
 let faceapi = null, camStream = null
+let camCheckTimer = null
+const capRatio = ref(0)      // 当前镜头里人脸宽度占画面比例(0~1)，用于判断够不够大
+const capReady = ref(false)  // 人脸足够大/清晰，才允许保存
+let bestFrame = null         // 录脸期间“质量最好”的那帧检测结果，点保存时用它而非手点那瞬
+let capTimer = 0             // 防抖：短暂无人脸不立刻清空 bestFrame
 
 const faceEnrolled = computed(() => faceIds.value.size)
 const hasFace = id => faceIds.value.has(id)
@@ -271,6 +281,7 @@ async function loadSchoolFace() {
 async function startFaceCapture(row) {
   faceTarget.value = row
   capMsg.value = ''; capMsgOk.value = false; capSaving.value = false
+  capRatio.value = 0; capReady.value = false; bestFrame = null
   showFaceCap.value = true
 }
 
@@ -285,21 +296,50 @@ async function openFaceCam() {
   } catch (e) {
     capMsg.value = '无法打开摄像头，请检查浏览器权限：' + ((e && e.message) || e)
     capMsgOk.value = false
+    return
   }
+  // 边录边检测：持续找“人脸够大”的最优帧，达到尺寸门槛才允许保存
+  capTimer = 0
+  const tick = async () => {
+    const vv = camEl.value
+    if (!showFaceCap.value || !vv || !vv.videoWidth) return
+    const c = document.createElement('canvas')
+    c.width = vv.videoWidth; c.height = vv.videoHeight
+    c.getContext('2d').drawImage(vv, 0, 0)
+    let res = null
+    try { res = await detectOne(faceapi, c) } catch (e) {}
+    if (res) {
+      capTimer = 0
+      const ratio = res.box.width / c.width
+      capRatio.value = Math.min(1, ratio)
+      if (ratio >= 0.3) {
+        // 达标帧：更新“最优帧”（选人脸更大的），保存用这一帧而非手点那瞬
+        capReady.value = true
+        if (!bestFrame || res.box.width > bestFrame.box.width) {
+          bestFrame = { descriptor: res.descriptor, box: res.box }
+        }
+      } else {
+        // 人脸变小但仍在：保留已达标状态直到离开(用无脸计数重置)，提示靠近
+        if (!bestFrame) capReady.value = false
+      }
+    } else {
+      capRatio.value = 0
+      capTimer++
+      if (capTimer > 3) { capReady.value = false; bestFrame = null }  // 连续无脸约0.6s后重置
+    }
+    camCheckTimer = setTimeout(tick, 200)
+  }
+  tick()
 }
 
 async function captureAndSave() {
-  const v = camEl.value
-  if (!v || !v.videoWidth) { capMsg.value = '摄像头还没准备好，请稍等再试'; capMsgOk.value = false; return }
-  const c = document.createElement('canvas')
-  c.width = v.videoWidth; c.height = v.videoHeight
-  c.getContext('2d').drawImage(v, 0, 0)
-  let res
-  try { res = await detectOne(faceapi, c) } catch (e) {}
-  if (!res) { capMsg.value = '未检测到人脸，请正对镜头'; capMsgOk.value = false; return }
+  if (!capReady.value || !bestFrame) {
+    capMsg.value = '人脸还不够大/不清晰，请靠近镜头'; capMsgOk.value = false
+    return
+  }
   capSaving.value = true
   try {
-    await api.put(`/faces/${faceTarget.value.id}`, { embedding: Array.from(res.descriptor) })
+    await api.put(`/faces/${faceTarget.value.id}`, { embedding: Array.from(bestFrame.descriptor) })
     faceIds.value = new Set([...faceIds.value, faceTarget.value.id])
     capMsg.value = '✓ 已录入'; capMsgOk.value = true
     ElMessage.success(`${faceTarget.value.name} 人脸已保存`)
@@ -313,7 +353,10 @@ async function captureAndSave() {
 }
 
 function closeFaceCam() {
+  if (camCheckTimer) clearTimeout(camCheckTimer)
+  camCheckTimer = null
   if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null }
+  capRatio.value = 0; capReady.value = false; bestFrame = null; capTimer = 0
   capMsg.value = ''
 }
 
@@ -359,6 +402,9 @@ async function runFaceBatch() {
       const canvas = await readImageAsCanvas(p.file)
       const res = await detectOne(faceapi, canvas)
       if (!res) { faceBatchLog.value.push({ ok: false, text: `${p.name}：照片里未检测到人脸` }); faceBatchDone.value++; continue }
+      // 质量门槛：人脸至少要占画面约 15%（太小的脸提不出可用特征，容易认错）
+      const ratio = res.box.width / canvas.width
+      if (ratio < 0.15) { faceBatchLog.value.push({ ok: false, text: `${p.name}：人脸在照片中太小（占画面 ${Math.round(ratio * 100)}%），请用清晰正面照` }); faceBatchDone.value++; continue }
       results.push({ student_id: st.id, embedding: Array.from(res.descriptor) })
     } catch (err) {
       faceBatchLog.value.push({ ok: false, text: `${p.name}：${err.message}` })
@@ -581,7 +627,14 @@ async function deleteStudent(row) {
 .face-cap-info b { color: #fff; }
 .face-cap-tip { color: #7d8fb9; font-size: 12px; margin-top: 2px; }
 video { width: 100%; max-width: 460px; border-radius: 12px; background: #000; margin: 8px auto 0; display: block; }
+.face-cap-live {
+  text-align: center; font-size: 13px; font-weight: 600;
+  margin: 8px 0 0; min-height: 18px;
+}
+.face-cap-live.ok { color: #4ade80; }
+.face-cap-live.err { color: #fbbf24; }
 .face-cap-btns { text-align: center; margin: 10px 0 4px; }
+.face-cap-btns .primary:disabled { opacity: .4; cursor: not-allowed; }
 .face-cap-msg { text-align: center; font-size: 14px; margin: 6px 0 0; }
 .face-cap-msg.ok { color: #4ade80; } .face-cap-msg.err { color: #f87171; }
 

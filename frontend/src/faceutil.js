@@ -43,3 +43,11 @@ export function bestMatch(desc, entries, threshold) {
   if (best && bestDist < threshold) return { student: best.student, dist: bestDist }
   return null
 }
+
+// entries: [{ student, embedding: [128] }]
+// 返回按距离升序排好的数组；调用方取 [0] 为第一名、[1] 为第二名判断余量
+export function rankMatches(desc, entries) {
+  return entries
+    .map(e => ({ student: e.student, dist: euclidean(desc, e.embedding) }))
+    .sort((a, b) => a.dist - b.dist)
+}
