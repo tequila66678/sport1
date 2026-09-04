@@ -300,34 +300,49 @@ async function openFaceCam() {
   }
   // 边录边检测：持续找“人脸够大”的最优帧，达到尺寸门槛才允许保存
   capTimer = 0
+  const NO_VIDEO_MSG = '摄像头没有出画面，请点“取消”重新打开'
+  let noVideo = 0  // 摄像头迟迟不出画面的连续轮数，超过则给出可见提示（别静默卡住）
   const tick = async () => {
-    const vv = camEl.value
-    if (!showFaceCap.value || !vv || !vv.videoWidth) return
-    const c = document.createElement('canvas')
-    c.width = vv.videoWidth; c.height = vv.videoHeight
-    c.getContext('2d').drawImage(vv, 0, 0)
-    let res = null
-    try { res = await detectOne(faceapi, c) } catch (e) {}
-    if (res) {
-      capTimer = 0
-      const ratio = res.box.width / c.width
-      capRatio.value = Math.min(1, ratio)
-      if (ratio >= 0.3) {
-        // 达标帧：更新“最优帧”（选人脸更大的），保存用这一帧而非手点那瞬
-        capReady.value = true
-        if (!bestFrame || res.box.width > bestFrame.box.width) {
-          bestFrame = { descriptor: res.descriptor, box: res.box }
+    try {
+      const vv = camEl.value
+      if (!showFaceCap.value || !vv) return              // 弹窗已关 → 真正停止
+      if (!vv.videoWidth || !vv.videoHeight) {           // 视频还没出画面：本轮跳过，等下一轮
+        noVideo++
+        if (noVideo > 25 && !capMsg.value) capMsg.value = NO_VIDEO_MSG  // ~5s 仍无画面 → 提示
+        return
+      }
+      if (capMsg.value === NO_VIDEO_MSG) capMsg.value = ''  // 画面出来了，清掉看门狗提示
+      noVideo = 0
+      const c = document.createElement('canvas')
+      c.width = vv.videoWidth; c.height = vv.videoHeight
+      c.getContext('2d').drawImage(vv, 0, 0)
+      let res = null
+      try { res = await detectOne(faceapi, c) } catch (e) {}
+      if (!showFaceCap.value) return                     // 关窗竞态：已清资源就不要再写状态
+      if (res) {
+        capTimer = 0
+        const ratio = res.box.width / c.width
+        capRatio.value = Math.min(1, ratio)
+        if (ratio >= 0.25) {
+          // 达标帧：更新“最优帧”（选人脸更大的），保存用这一帧而非手点那瞬
+          capReady.value = true
+          if (!bestFrame || res.box.width > bestFrame.box.width) {
+            bestFrame = { descriptor: res.descriptor, box: res.box }
+          }
+        } else {
+          // 人脸变小但仍在：保留已达标状态直到离开(用无脸计数重置)，提示靠近
+          if (!bestFrame) capReady.value = false
         }
       } else {
-        // 人脸变小但仍在：保留已达标状态直到离开(用无脸计数重置)，提示靠近
-        if (!bestFrame) capReady.value = false
+        capRatio.value = 0
+        capTimer++
+        if (capTimer > 3) { capReady.value = false; bestFrame = null }  // 连续无脸约0.6s后重置
       }
-    } else {
-      capRatio.value = 0
-      capTimer++
-      if (capTimer > 3) { capReady.value = false; bestFrame = null }  // 连续无脸约0.6s后重置
+    } finally {
+      // 关键修复：无论视频是否就绪、检测是否耗时，只要弹窗还开着就每 200ms 续跑。
+      // 原 bug：videoWidth 为 0 时提前 return，末尾的 setTimeout 永不执行 → 检测循环静默死亡。
+      if (showFaceCap.value) camCheckTimer = setTimeout(tick, 200)
     }
-    camCheckTimer = setTimeout(tick, 200)
   }
   tick()
 }
