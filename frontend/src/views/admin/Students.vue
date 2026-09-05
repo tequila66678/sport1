@@ -193,7 +193,7 @@
     <!-- 批量导入人脸照片 -->
     <el-dialog v-model="showFaceBatch" title="📷 批量导入人脸照片" :width="isMobile ? '100%' : '560px'" :close-on-click-modal="false">
       <div class="face-batch-tip">
-        ① 照片文件名 <b>必须 = 学号 + 图片后缀</b>，支持 <code>jpg</code> <code>jpeg</code> <code>png</code> <code>webp</code> <code>gif</code> <code>bmp</code> <code>avif</code>（例：<code>270101.jpg</code>）——系统按文件名找学生，不认姓名；手机默认的 HEIC 请先转成 jpg/png<br>
+        ① 照片文件名 <b>必须是 学号 或 姓名 + 图片后缀</b>，支持 <code>jpg</code> <code>jpeg</code> <code>png</code> <code>webp</code> <code>gif</code> <code>bmp</code> <code>avif</code>（例：<code>270101.jpg</code> 或 <code>张三.png</code>）。系统优先按学号、其次按姓名精确匹配；姓名有重名时请改用学号命名<br>
         ② 照片在浏览器本地处理，<b>原图不会上传</b>，只提取人脸特征保存
       </div>
       <div v-if="!faceBatchFiles.length" style="text-align:center;padding:12px">
@@ -414,9 +414,15 @@ async function runFaceBatch() {
   faceWriting.value = true; faceBatchDone.value = 0; faceBatchLog.value = []
   const results = []
   for (const p of list) {
-    const sid6 = p.name.replace(/\.[^.]+$/, '').trim()
-    const st = allStudents.value.find(s => s.student_id === sid6)
-    if (!st) { faceBatchLog.value.push({ ok: false, text: `${p.name}：学号 ${sid6} 不在学生名单` }); faceBatchDone.value++; continue }
+    const key = p.name.replace(/\.[^.]+$/, '').trim()
+    // 优先按学号精确匹配；学号找不到再按姓名精确匹配（姓名重名则跳过，请改用学号）
+    let st = allStudents.value.find(s => s.student_id === key)
+    if (!st) {
+      const byName = allStudents.value.filter(s => s.name === key)
+      if (byName.length === 1) st = byName[0]
+      else if (byName.length > 1) { faceBatchLog.value.push({ ok: false, text: `${p.name}：姓名「${key}」有 ${byName.length} 人重名，请把文件名改成学号` }); faceBatchDone.value++; continue }
+    }
+    if (!st) { faceBatchLog.value.push({ ok: false, text: `${p.name}：未找到学号或姓名为「${key}」的学生` }); faceBatchDone.value++; continue }
     try {
       const canvas = await readImageAsCanvas(p.file)
       const res = await detectOne(faceapi, canvas)
