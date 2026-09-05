@@ -193,7 +193,7 @@
     <!-- 批量导入人脸照片 -->
     <el-dialog v-model="showFaceBatch" title="📷 批量导入人脸照片" :width="isMobile ? '100%' : '560px'" :close-on-click-modal="false">
       <div class="face-batch-tip">
-        ① 照片文件名 <b>必须 = 学号.jpg</b>（例：<code>270101.jpg</code>）——系统按文件名找学生，不认姓名<br>
+        ① 照片文件名 <b>必须 = 学号 + 图片后缀</b>，支持 <code>jpg</code> <code>jpeg</code> <code>png</code> <code>webp</code> <code>gif</code> <code>bmp</code> <code>avif</code>（例：<code>270101.jpg</code>）——系统按文件名找学生，不认姓名；手机默认的 HEIC 请先转成 jpg/png<br>
         ② 照片在浏览器本地处理，<b>原图不会上传</b>，只提取人脸特征保存
       </div>
       <div v-if="!faceBatchFiles.length" style="text-align:center;padding:12px">
@@ -375,12 +375,16 @@ function closeFaceCam() {
   capMsg.value = ''
 }
 
+// 批量录脸支持多种常用图片格式（后缀匹配；HEIC 浏览器解不了，需先转 jpg/png）
+const FACE_IMG_RE = /\.(jpe?g|png|webp|gif|bmp|avif)$/i
 function onPickFaceDir(e) {
   const files = Array.from(e.target.files || [])
   e.target.value = ''
-  const imgs = files.filter(f => /\.(jpe?g|png)$/i.test(f.name))
-  if (!imgs.length) { ElMessage.warning('文件夹里没找到照片'); return }
-  faceBatchFiles.value = imgs
+  const imgs = files.filter(f => FACE_IMG_RE.test(f.name))
+  if (!imgs.length) { ElMessage.warning('文件夹里没找到照片（支持 jpg/jpeg/png/webp/gif/bmp/avif）'); return }
+  // 归一成 { name, file }：按文件名找学生 + 用 file 解码。File 对象本身没有 .file 属性，
+  // 直接存裸 File 会让 runFaceBatch 里 p.file 取到 undefined → 批量永远读不出图。
+  faceBatchFiles.value = imgs.map(f => ({ name: f.name, file: f }))
   faceBatchLog.value = []; faceBatchDone.value = 0
   showFaceBatch.value = true
 }
