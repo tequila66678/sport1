@@ -110,6 +110,20 @@ def startup():
                     conn.execute(text(f"ALTER TABLE {tbl} ADD COLUMN school_id INTEGER"))
                     conn.commit()
 
+    # Multi-school: 学号改为按校独立编号（多校可同号）。
+    # 旧模型建过全库唯一索引 ix_students_student_id，会挡住跨校同号导入；此处幂等移除。
+    # 同校查重改由应用层（students.py / student_portal.py）按 school 作用域保证。
+    if "students" in table_names:
+        try:
+            for i in insp.get_indexes("students"):
+                if i.get("unique") and i.get("column_names") == ["student_id"]:
+                    with engine.connect() as conn:
+                        conn.execute(text(f"DROP INDEX IF EXISTS {i['name']}"))
+                        conn.commit()
+                    print(f"migration: dropped students unique index {i['name']}（学号改按校独立）")
+        except Exception as e:
+            print(f"WARNING: drop students unique index failed: {e}")
+
     # Create default school and migrate existing data if not yet done
     from .database import SessionLocal
     from .models import Admin, School

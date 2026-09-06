@@ -87,11 +87,12 @@ def test_device_scores_unknown_student(env):
 
 
 def test_device_scores_upsert_dedup(env):
-    """同学生+同项目+同日重复上传 → 只保留一条记录（覆盖式 upsert，与手动录入一致）"""
+    """同学生+同项目+同日重复上传 → 只保留一条记录，且保最好成绩（同分更快才覆盖）"""
     client, d = env
     h = auth_headers(d["admin"], d["school_id"])
-    _post_scores(client, h, d, "ev800", d["stu_f"], 178000)
-    _post_scores(client, h, d, "ev800", d["stu_f"], 183000)
+    _post_scores(client, h, d, "ev800", d["stu_f"], 178000)  # 2'58 满分
+    _post_scores(client, h, d, "ev800", d["stu_f"], 183000)  # 3'03 同分更慢 → 不覆盖（保最好）
+    _post_scores(client, h, d, "ev800", d["stu_f"], 172000)  # 2'52 同分更快 → 覆盖
     from app.database import SessionLocal
     from app.models import Score
     db = SessionLocal()
@@ -101,7 +102,7 @@ def test_device_scores_upsert_dedup(env):
                                  Score.event_id == d["ev800"]).one().raw_value
     db.close()
     assert n == 1
-    assert raw == "3'03"  # 第二次覆盖了第一次
+    assert raw == "2'52"  # 最终保留最快成绩
 
 
 def test_device_scores_cross_school_rejected(env):

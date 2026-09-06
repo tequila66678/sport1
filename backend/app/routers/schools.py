@@ -7,6 +7,11 @@ from ..auth import get_super_admin, verify_password
 
 router = APIRouter(prefix="/api/schools", tags=["schools"])
 
+# 学生登录页选校用：无需登录，只暴露 id + name
+@router.get("/public")
+def list_schools_public(db: Session = Depends(get_db)):
+    return [{"id": s.id, "name": s.name} for s in db.query(School).order_by(School.id).all()]
+
 @router.get("", response_model=list[SchoolOut])
 def list_schools(db: Session = Depends(get_db), current: Admin = Depends(get_super_admin)):
     return db.query(School).order_by(School.id).all()

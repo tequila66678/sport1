@@ -54,9 +54,12 @@ def create_student(data: StudentCreate, db: Session = Depends(get_db), current: 
     cls = q.first()
     if not cls:
         raise HTTPException(status_code=400, detail="班级不存在或不属于当前学校")
-    existing = db.query(Student).filter(Student.student_id == data.student_id).first()
+    # 查重按目标班级所在学校：多校可同号，同校不可重复
+    existing = db.query(Student).join(Class).filter(
+        Class.school_id == cls.school_id, Student.student_id == data.student_id
+    ).first()
     if existing:
-        raise HTTPException(status_code=400, detail="学号已存在")
+        raise HTTPException(status_code=400, detail="该学号在本校已存在")
     student = Student(
         student_id=data.student_id,
         name=data.name,
@@ -93,6 +96,21 @@ def update_student(student_id: int, data: StudentCreate, db: Session = Depends(g
         s = db.query(Student).filter(Student.id == student_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="学生不存在")
+    # 目标班级须在当前学校（与 create_student 一致）
+    q = db.query(Class).filter(Class.id == data.class_id)
+    if sid is not None:
+        q = q.filter(Class.school_id == sid)
+    cls = q.first()
+    if not cls:
+        raise HTTPException(status_code=400, detail="班级不存在或不属于当前学校")
+    # 同校学号查重（排除自身）；跨校可同号
+    existing = db.query(Student).join(Class).filter(
+        Class.school_id == cls.school_id,
+        Student.student_id == data.student_id,
+        Student.id != s.id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="该学号在本校已存在")
     s.student_id = data.student_id
     s.name = data.name
     s.gender = data.gender
@@ -150,9 +168,12 @@ def batch_import(file: UploadFile = File(...), db: Session = Depends(get_db), cu
             cls = Class(grade=grade, name=class_name, school_id=sid)
             db.add(cls)
             db.flush()
-        existing = db.query(Student).filter(Student.student_id == student_id).first()
+        # 查重按目标班级所在学校（多校可同号；cls 已按 sid 或新建为 sid 学校）
+        existing = db.query(Student).join(Class).filter(
+            Class.school_id == cls.school_id, Student.student_id == student_id
+        ).first()
         if existing:
-            errors.append(f"行{row_idx}: 学号{student_id}已存在，跳过")
+            errors.append(f"行{row_idx}: 学号{student_id}在本校已存在，跳过")
             continue
         student = Student(
             student_id=student_id,

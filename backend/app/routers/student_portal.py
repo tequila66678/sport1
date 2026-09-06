@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from ..database import get_db
@@ -9,15 +10,19 @@ from collections import defaultdict
 
 router = APIRouter(prefix="/api/student", tags=["student-portal"])
 
-def _authenticate_student(db: Session, student_id: str, password: str) -> Student:
-    student = db.query(Student).filter(Student.student_id == student_id).first()
-    if not student or not verify_student_password(password, student.password_hash):
+def _authenticate_student(db: Session, school_id: Optional[int], student_id: str, password: str) -> Student:
+    # 学号按校独立：传 school_id 则限定该校；不传时若跨校同号（多于一条）即视为无法唯一确定，拒绝
+    q = db.query(Student).join(Class).filter(Student.student_id == student_id)
+    if school_id is not None:
+        q = q.filter(Class.school_id == school_id)
+    matches = q.all()
+    if len(matches) != 1 or not verify_student_password(password, matches[0].password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="学号或密码错误")
-    return student
+    return matches[0]
 
 @router.post("/login")
 def student_login(data: StudentLogin, db: Session = Depends(get_db)):
-    student = _authenticate_student(db, data.student_id, data.password)
+    student = _authenticate_student(db, data.school_id, data.student_id, data.password)
     school_id = None
     if student.class_ and student.class_.school_id:
         school_id = student.class_.school_id

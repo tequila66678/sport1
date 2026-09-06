@@ -32,7 +32,9 @@ class Class(Base):
 class Student(Base):
     __tablename__ = "students"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    student_id = Column(String(6), unique=True, nullable=False, index=True)
+    # 学号按校独立编号（多校可同号）——唯一性由应用层按 school 查重保证；
+    # 不再建全库唯一索引，避免跨校导入被挡。既有库的 ix_students_student_id 由 main.py 启动迁移移除。
+    student_id = Column(String(6), nullable=False, index=True)
     name = Column(String, nullable=False)
     gender = Column(SqlEnum(Gender), nullable=False)
     class_id = Column(Integer, ForeignKey("classes.id"), nullable=False)

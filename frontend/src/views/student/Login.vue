@@ -5,6 +5,9 @@
       <h1>{{ schoolName }}</h1>
       <h2>学生成绩查询</h2>
       <el-form @submit.prevent="login" class="lc-form">
+        <el-select v-model="schoolId" placeholder="选择学校" size="large" class="lc-input" style="width:100%">
+          <el-option v-for="s in schools" :key="s.id" :label="s.name" :value="s.id" />
+        </el-select>
         <el-input v-model="studentId" placeholder="学号" size="large" class="lc-input" />
         <el-input v-model="password" type="password" placeholder="密码（默认学号后6位）" size="large" show-password class="lc-input" />
         <el-button type="primary" size="large" @click="login" :loading="loading" class="lc-btn">登 录</el-button>
@@ -33,20 +36,27 @@ import { ElMessage } from 'element-plus'
 const router = useRouter()
 const studentId = ref(''); const password = ref(''); const loading = ref(false)
 const schoolName = ref('体育成绩管理系统'); const designer = ref('')
+const schools = ref([]); const schoolId = ref(null)
 const showChangePwd = ref(false); const oldPwd = ref(''); const newPwd = ref('')
 
 onMounted(async () => {
   try {
-    const res = await api.get('/config/public')
-    schoolName.value = res.data.school_name || schoolName.value
-    designer.value = res.data.designer || ''
+    const [cfg, sch] = await Promise.all([
+      api.get('/config/public'),
+      api.get('/schools/public').catch(() => ({ data: [] }))
+    ])
+    schoolName.value = cfg.data.school_name || schoolName.value
+    designer.value = cfg.data.designer || ''
+    schools.value = sch.data || []
+    if (schools.value.length === 1) schoolId.value = schools.value[0].id
   } catch {}
 })
 
 async function login() {
+  if (!schoolId.value) { ElMessage.warning('请先选择学校'); return }
   loading.value = true
   try {
-    const res = await api.post('/student/login', { student_id: studentId.value, password: password.value })
+    const res = await api.post('/student/login', { student_id: studentId.value, password: password.value, school_id: schoolId.value })
     sessionStorage.setItem('student_token', res.data.token)
     sessionStorage.setItem('student_id', studentId.value)
     sessionStorage.setItem('student_info', JSON.stringify(res.data.student))

@@ -178,6 +178,7 @@ class ConfigOut(BaseModel):
 class StudentLogin(BaseModel):
     student_id: str
     password: str
+    school_id: Optional[int] = None   # 多校同号时按学校定位学生；缺省则全局查找（仅当全局唯一时可用）
 
 class StudentPasswordChange(BaseModel):
     old_password: str
