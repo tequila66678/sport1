@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
+import re
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -62,6 +63,43 @@ def _fmt_time(ms: int) -> str:
     return f"{m}'{s:02d}"
 
 
+def _raw_to_ms(raw_value) -> int:
+    """把库里的 raw_value 解析成毫秒，用于「同分时比时间」判断。
+
+    兼容设备端 "M'SS"（_fmt_time 输出）与人工端 "M:SS" 及纯秒数。
+    解析失败/为空 → 返回超大值：视为无有效历史时间，让新成绩可覆盖。
+    """
+    if raw_value is None:
+        return 10 ** 18
+    text = str(raw_value).strip()
+    if not text:
+        return 10 ** 18
+    nums = []
+    for part in re.split(r"[':：\s]+", text):
+        try:
+            nums.append(float(part))
+        except ValueError:
+            return 10 ** 18
+    if not nums or any(n < 0 for n in nums):
+        return 10 ** 18
+    if len(nums) == 1:
+        return int(nums[0] * 1000)                        # 纯秒，如 178 / 178.5
+    if len(nums) == 2:
+        return int((nums[0] * 60 + nums[1]) * 1000)       # M'SS / M:SS
+    return int((nums[0] * 3600 + nums[1] * 60 + nums[2]) * 1000)  # H:MM:SS 兜底
+
+
+def _is_better_score(new_time_ms: int, new_score, existing, old_time_ms: int) -> bool:
+    """新成绩是否值得覆盖旧成绩：无历史/无分数 → 是；分更高 → 是；同分更快 → 是；否则否。"""
+    if existing is None or existing.earned_score is None:
+        return True
+    if new_score > existing.earned_score:
+        return True
+    if new_score < existing.earned_score:
+        return False
+    return new_time_ms < old_time_ms
+
+
 @router.post("/scores", response_model=list[DeviceScoreResult])
 def device_scores(data: DeviceScoreBatch, db: Session = Depends(get_db),
                   current: Admin = Depends(get_school_admin)):
@@ -102,6 +140,12 @@ def device_scores(data: DeviceScoreBatch, db: Session = Depends(get_db),
             Score.event_id == event.id,
             Score.test_date == test_date,
         ).first()
+        if existing is not None and not _is_better_score(entry.time_ms, earned, existing, _raw_to_ms(existing.raw_value)):
+            # 库里已有更好成绩（分更高，或同分更快）：保留旧值不覆盖。
+            # 响应回填真实入库值，避免前端误以为新成绩已写入。
+            results.append(DeviceScoreResult(ok=True, student_id=entry.student_id,
+                                             raw_value=existing.raw_value, earned_score=existing.earned_score))
+            continue
         if existing:
             existing.raw_value = raw_value
             existing.earned_score = earned

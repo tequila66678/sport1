@@ -22,6 +22,7 @@ const routes = [
       { path: 'dashboard', name: 'Dashboard', component: () => import('../views/admin/Dashboard.vue') },
       { path: 'score-entry', name: 'ScoreEntry', component: () => import('../views/admin/ScoreEntry.vue') },
       { path: 'students', name: 'Students', component: () => import('../views/admin/Students.vue') },
+      { path: 'devices', name: 'TestDevices', component: () => import('../views/admin/TestDevices.vue') },
       { path: 'statistics', name: 'Statistics', component: () => import('../views/admin/Statistics.vue') },
       { path: 'attendance', name: 'Attendance', component: () => import('../views/admin/Attendance.vue') },
       { path: 'settings', name: 'Settings', component: () => import('../views/admin/Settings.vue') }

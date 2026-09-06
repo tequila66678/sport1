@@ -118,14 +118,25 @@ const faceState = reactive({
   candidateFrames: 0,      // 人脸在但匹配不上，连续轮数
 })
 
-// 识别候选池：只取「有向量、且（默认）本批未记录」的学生，直接灌注 embedding（学生对象本身不带向量）
-function facePool(excludeRecorded = true) {
-  return students.value
-    .filter(s => embeddingById.value.has(s.id) && (!excludeRecorded || !recordedIds.has(s.id)))
+// 识别候选池：只取「有向量」的学生，按本批是否已记录拆成 pending / recorded 两池。
+// 池依赖 students/faces/recordedIds，仅在 applySync/startBatch/recordOne/removeRecord/resetBatch 时重建，
+// 避免识别循环里每帧 O(n) filter+map。学生对象本身不带向量，此处直接灌注 embedding。
+let allFacePool = []
+let pendingFacePool = []
+let recordedFacePool = []
+function rebuildFacePools() {
+  allFacePool = students.value
+    .filter(s => embeddingById.value.has(s.id))
     .map(s => ({
       id: s.id, student_id: s.student_id, name: s.name, gender: s.gender,
       class_name: s.class_name || '', embedding: embeddingById.value.get(s.id),
     }))
+  pendingFacePool = []
+  recordedFacePool = []
+  for (const p of allFacePool) {
+    if (recordedIds.has(p.id)) recordedFacePool.push(p)
+    else pendingFacePool.push(p)
+  }
 }
 
 // 4 帧滑动窗口，数当前学生票数；满 minVotes 即确认
@@ -171,10 +182,21 @@ function pickEvent(gender) {
   return ev || null
 }
 
-// 闪屏提示，自动 2.2s 后清除（避免在途帧覆盖残留）
-function flashNow(text) {
+// 闪屏提示：自动 2.2s 后清除。同文案 800ms 内去重（防持续条件每帧重排定时器/刷屏）；
+// force=true 用于成功等关键提示，保证不因去重被吞掉。
+let flashTimer = null
+let lastFlashAt = 0
+let lastFlashText = ''
+function flashNow(text, force = false) {
+  const now = Date.now()
+  if (!force && text === lastFlashText && now - lastFlashAt < 800) return
+  lastFlashText = text
+  lastFlashAt = now
   flashText.value = text
-  setTimeout(() => { if (flashText.value === text) flashText.value = '' }, 2200)
+  if (flashTimer) clearTimeout(flashTimer)
+  flashTimer = setTimeout(() => {
+    if (flashText.value === text) { flashText.value = ''; flashTimer = null }
+  }, 2200)
 }
 
 function fmt(ms) {
@@ -235,6 +257,7 @@ function applySync(data) {
   events.value = data.long_run_events || []
   students.value = data.students || []
   faces.value = data.face_embeddings || []
+  rebuildFacePools()
 }
 
 function stopCamera() {
@@ -245,6 +268,7 @@ function stopCamera() {
 async function startBatch() {
   running = true; records.value = []; recordedIds = new Set(); messages.value = []; uploadRes.value = {}
   unlockStudent()
+  rebuildFacePools()      // recordedIds 已清空，池子必须回落到「全员可识别」，否则上批已记录者本批永远匹配不上
   startMs = performance.now(); mode.value = 'running'
   statusText.value = '男生→1000米 · 女生→800米，站到镜头前识别'
   try {
@@ -293,7 +317,7 @@ async function recognizeLoop() {
 
   // —— 无脸 / 脸太弱：LOCKED 时攒满帧数才释放，防上一人刚记完立刻连记下一位 ——
   //    弱脸也算「离场」，避免有人躲在镜头边缘脸小不动导致锁死
-  if (!res || faceQuality(res) < 60) {
+  if (!res || faceQuality(res) < FACE_CONFIG.qualityThreshold) {
     faceState.noFaceFrames++
     faceState.candidateFrames = 0
     if (faceState.phase === 'LOCKED' && faceState.noFaceFrames >= RECOGNITION_FLOW.unlockFrames) unlockStudent()
@@ -316,15 +340,15 @@ async function recognizeLoop() {
   }
 
   // —— 未锁定：只在「本批未记录」的池子里 Top1/Top2 匹配（已灌注 embedding）——
-  const result = rankMatches(res.descriptor, facePool(true))
+  const result = rankMatches(res.descriptor, pendingFacePool)
   if (!result.pass) {
     // 是已记录的人又回来 → 明确提示「已记录」，不误报未识别
     faceState.candidateFrames++
-    const again = bestMatch(res.descriptor, facePool(false).filter(s => recordedIds.has(s.id)), FACE_CONFIG.threshold)
+    const again = bestMatch(res.descriptor, recordedFacePool)
     if (again) {
       faceState.candidateFrames = 0
       flashNow(`⚠️ ${again.student.name} 本批已记录`)
-    } else if (faceState.candidateFrames > RECOGNITION_FLOW.candidateTimeout) {
+    } else if (faceState.candidateFrames >= RECOGNITION_FLOW.candidateTimeout) {
       faceState.votes = []
       faceState.candidate = null
       faceState.candidateFrames = 0
@@ -348,7 +372,7 @@ async function recognizeLoop() {
     // 模型 A：识别确认帧 = 冲线帧，elapsed 此刻冻结，成绩只从这一个出口产生
     const elapsed = performance.now() - startMs
     if (recordOne(best, elapsed)) {
-      flashNow(`✅ ${best.name} · ${fmt(elapsed)}`)
+      flashNow(`✅ ${best.name} · ${fmt(elapsed)}`, true)
     } else {
       unlockStudent()
       flashNow('⚠️ 该生无 800/1000 项目，无法记录')
@@ -368,6 +392,7 @@ function recordOne(s, elapsedMs) {
     id: s.id, name: s.name, class_name: s.class_name || '', gender: s.gender,
     event_id: ev.id, time: fmt(elapsedMs), timeMs: Math.round(elapsedMs),
   })
+  rebuildFacePools()      // 该生移入 recordedFacePool，下帧起不会重复进入 pending 被再次识别
   statusText.value = `已记录 ${records.value.length} 人`
   saveBatch()
   return true
@@ -381,8 +406,10 @@ function manualRecord() {
   if (recordedIds.has(s.id)) { flashNow(`⚠️ ${s.name} 本批已记录`); manualId.value = ''; return }
   const elapsed = performance.now() - startMs
   if (recordOne(s, elapsed)) {
-    // 不锁 faceState：recordedIds 已挡住重复；若该生有向量又回镜头，走「已记录」提示
-    flashNow(`✅ 手动 ${s.name} · ${fmt(elapsed)}`)
+    // 手动纠错成功 → 状态机归位，机器立即可接下一位（不必等 LOCKED 的 1.5s verify 超时）。
+    // recordedIds 仍挡住重复；该生若有向量又回镜头，走「已记录」提示。
+    unlockStudent()
+    flashNow(`✅ 手动 ${s.name} · ${fmt(elapsed)}`, true)
   } else {
     flashNow('⚠️ 该生无 800/1000 项目，无法记录')
   }
@@ -404,11 +431,15 @@ function removeRecord(i) {
   recordedIds.delete(r.id)
   records.value.splice(i, 1)
   uploadRes.value = {}
+  rebuildFacePools()      // 该生退回 pending，若回炉重跑可被再次识别
   saveBatch()
 }
 
 function resetBatch() {
   records.value = []; messages.value = []; uploadRes.value = {}; manualId.value = ''
+  recordedIds = new Set()
+  unlockStudent()
+  rebuildFacePools()      // 清空本批记录后，池子回落为全员可识别
   try { localStorage.removeItem(BATCH_KEY) } catch (e) {}
   mode.value = 'ready'
 }
@@ -434,14 +465,19 @@ async function upload() {
       res.data.forEach(i => { bySid[i.student_id] = i; if (i.ok) okCount++ })
     }
     uploadRes.value = bySid
-    const failed = records.value.filter(r => bySid[r.id] && !bySid[r.id].ok)
+    const failed = records.value.filter(r => {
+      const result = bySid[r.id]
+      return !result || !result.ok      // 服务端未确认(缺条目)同样算失败，绝不能清空本批
+    })
     if (failed.length === 0) {
       messages.value.push({ ok: true, text: `✅ 已上传 ${records.value.length} 条，全部成功` })
       try { localStorage.removeItem(BATCH_KEY) } catch (e) {}
     } else {
       for (const f of failed) {
         const s = studentsById.value.get(f.id)
-        messages.value.push({ ok: false, text: `${s ? s.name : f.id} 上传失败：${bySid[f.id].reason}（可删除该行后重传）` })
+        const result = bySid[f.id]
+        const reason = result ? (result.reason || '未知原因') : '服务端未返回确认'
+        messages.value.push({ ok: false, text: `${s ? s.name : f.id} 上传失败：${reason}（可删除该行后重传）` })
       }
       messages.value.push({ ok: true, text: `成功 ${okCount} 条，其余处理后可再点上传（已成功行会安全覆盖，不重复）` })
       saveBatch()

@@ -28,15 +28,20 @@
         <span class="func-title">成绩录入</span>
         <span class="func-desc">逐人录入 · 语音 · 实时打分</span>
       </router-link>
+      <router-link to="/admin/statistics" class="func-card">
+        <span class="func-icon">📈</span>
+        <span class="func-title">统计分析</span>
+        <span class="func-desc">全校 · 年级 · 班级 · 个人</span>
+      </router-link>
       <router-link to="/admin/students" class="func-card">
         <span class="func-icon">👥</span>
         <span class="func-title">学生管理</span>
         <span class="func-desc">导入 · 修改 · 删除</span>
       </router-link>
-      <router-link to="/admin/statistics" class="func-card">
-        <span class="func-icon">📈</span>
-        <span class="func-title">统计分析</span>
-        <span class="func-desc">全校 · 年级 · 班级 · 个人</span>
+      <router-link to="/admin/devices" class="func-card">
+        <span class="func-icon">🏃</span>
+        <span class="func-title">项目测试</span>
+        <span class="func-desc">长跑测试 · 人脸识别 · 自动计时</span>
       </router-link>
       <router-link v-if="adminInfo?.role !== 'teacher'" to="/admin/settings" class="func-card">
         <span class="func-icon">⚙️</span>
