@@ -43,8 +43,12 @@ const routes = [
     name: 'Run',
     component: () => import('../views/Run.vue')
   },
-  { path: '/', redirect: '/admin/login' },
-  { path: '/:pathMatch(.*)*', redirect: '/admin/login' }
+  {
+    path: '/',
+    name: 'Landing',
+    component: () => import('../views/Landing.vue')
+  },
+  { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
 const router = createRouter({

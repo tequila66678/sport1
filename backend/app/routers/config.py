@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..models import SystemConfig, Admin
+from ..models import SystemConfig, Admin, School, Student, SportEvent, Score
 from ..schemas import ConfigUpdate, ConfigOut
 from ..auth import get_school_admin, require_school
 
@@ -33,6 +34,16 @@ def get_public_config(school_id: Optional[int] = None, db: Session = Depends(get
         if row:
             result["school_name"] = row[0]
     return result
+
+@router.get("/public/stats")
+def get_public_stats(db: Session = Depends(get_db)):
+    """欢迎页公开统计：只返回聚合计数，不含任何学生/成绩明细（无隐私风险，无需登录）。
+    项目按名称去重计数，避免各校同名项目（如 800米跑）被重复统计。"""
+    schools = db.query(School).count()
+    students = db.query(Student).count()
+    events = db.query(func.count(func.distinct(SportEvent.name))).scalar() or 0
+    scores = db.query(Score).count()
+    return {"schools": schools, "students": students, "events": events, "scores": scores}
 
 @router.put("/{key}")
 def update_config(key: str, data: ConfigUpdate, db: Session = Depends(get_db), current: Admin = Depends(get_school_admin)):
