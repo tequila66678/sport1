@@ -5,9 +5,9 @@
       <h1>{{ schoolName }}</h1>
       <h2>管理员登录</h2>
       <el-form @submit.prevent="login" class="lc-form">
-        <el-input v-model="username" placeholder="用户名" size="large" class="lc-input" />
-        <el-input v-model="password" type="password" placeholder="密码" size="large" show-password class="lc-input" />
-        <el-button type="primary" size="large" @click="login" :loading="loading" class="lc-btn">登 录</el-button>
+        <el-input v-model="username" name="username" autocomplete="username" placeholder="用户名" size="large" class="lc-input" />
+        <el-input v-model="password" type="password" name="password" autocomplete="current-password" placeholder="密码" size="large" show-password class="lc-input" />
+        <el-button type="primary" native-type="submit" size="large" :loading="loading" class="lc-btn">登 录</el-button>
       </el-form>
       <p class="lc-footer">Designed by {{ designer }}</p>
     </div>
