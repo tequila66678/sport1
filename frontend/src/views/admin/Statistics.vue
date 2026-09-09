@@ -195,6 +195,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../api'
 import ExportDialog from '../../components/ExportDialog.vue'
@@ -202,6 +203,8 @@ import VChart from 'vue-echarts'
 import 'echarts'
 
 const activeTab = ref('grade')
+const route = useRoute()
+const router = useRouter()
 const classes = ref([])
 const events = ref([])
 const showExport = ref(false)
@@ -229,6 +232,19 @@ onMounted(async () => {
   const [cRes, eRes] = await Promise.all([api.get('/events/classes'), api.get('/events')])
   classes.value = cRes.data.map(c => ({ ...c, label: `${c.grade}${c.name}` }))
   events.value = eRes.data
+
+  // 支持从成绩录入等其它页直达个人追踪：/admin/statistics?student=<内部id>
+  const sid = route.query.student ? Number(route.query.student) : null
+  if (sid) {
+    activeTab.value = 'student'
+    currentStudentId = sid
+    await loadStudentStats()
+    if (studentStats.value?.student) {
+      studentSearch.value = studentStats.value.student.student_id
+    }
+    // 消费掉参数，避免刷新页面时又被拉回个人追踪
+    router.replace({ query: {} })
+  }
 })
 
 function onTabChange(tab) {

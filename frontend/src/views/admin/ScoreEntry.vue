@@ -100,8 +100,11 @@
         <div class="student-nav">
           <button class="nav-arrow" @click="prevStudent" :disabled="currentIndex === 0">◀</button>
           <div class="student-info">
-            <div class="student-name">{{ currentStudent.name }}</div>
-            <div class="student-meta">{{ currentStudent.student_id }} · {{ currentStudent.gender === 'M' ? '男' : '女' }}</div>
+            <div class="student-name name-link" @click="openTrack" :title="`查看 ${currentStudent.name} 的个人追踪`">{{ currentStudent.name }}</div>
+            <div class="student-meta">
+              {{ currentStudent.student_id }} · {{ currentStudent.gender === 'M' ? '男' : '女' }}
+              <a class="track-link" @click.stop="openTrack">📈 个人追踪</a>
+            </div>
           </div>
           <button class="nav-arrow" @click="nextStudent" :disabled="currentIndex >= students.length - 1">▶</button>
         </div>
@@ -152,8 +155,11 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../../api'
+
+const router = useRouter()
 
 const classes = ref([])
 const events = ref([])
@@ -235,6 +241,17 @@ function nextStudent() { if (currentIndex.value < students.value.length - 1) { c
 function resetInput() {
   currentValue.value = ''; currentScore.value = null; previousScore.value = null
   change.value = null; isPraise.value = false; isWarning.value = false
+}
+
+/** 点学生姓名 → 跳到统计分析的「个人追踪」并载入该生 */
+async function openTrack() {
+  if (!currentStudent.value) return
+  if (currentValue.value) {
+    try {
+      await ElMessageBox.confirm('当前这条成绩还未保存，离开将丢失。仍要查看该生的个人追踪吗？', '确认离开', { type: 'warning' })
+    } catch { return }
+  }
+  router.push({ path: '/admin/statistics', query: { student: currentStudent.value.id } })
 }
 
 async function onValueChange() {
@@ -485,6 +502,14 @@ async function saveAndNext() {
 .student-info { text-align: center; flex: 1; }
 .student-name { font-size: 28px; font-weight: 700; color: #fff; }
 .student-meta { font-size: 14px; color: #8fa3d8; margin-top: 4px; }
+.name-link { cursor: pointer; display: inline-block; transition: color .2s; }
+.name-link:hover { color: #a0b8ff; text-decoration: underline; text-underline-offset: 4px; }
+.track-link {
+  display: inline-block; margin-left: 10px; padding: 2px 10px;
+  border-radius: 999px; border: 1px solid rgba(100, 140, 255, .4);
+  color: #9db4ff; font-size: 12px; cursor: pointer; transition: all .2s;
+}
+.track-link:hover { background: rgba(100, 140, 255, .18); color: #fff; }
 
 /* Entry progress */
 .entry-progress { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
