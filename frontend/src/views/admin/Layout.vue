@@ -64,7 +64,12 @@
 
       <!-- Page content -->
       <main class="main-content">
-        <router-view />
+        <!-- 只缓存成绩录入页：跨页去看「个人追踪」返回时能原样续录；其余页不缓存，保持每次进入都刷新 -->
+        <router-view v-slot="{ Component }">
+          <keep-alive :include="['ScoreEntry']">
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
       </main>
     </div>
   </div>

@@ -156,10 +156,13 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import api from '../../api'
 
 const router = useRouter()
+
+// 供 Layout 的 keep-alive 按名缓存，跨页看「个人追踪」回来时可原样续录
+defineOptions({ name: 'ScoreEntry' })
 
 const classes = ref([])
 const events = ref([])
@@ -243,15 +246,10 @@ function resetInput() {
   change.value = null; isPraise.value = false; isWarning.value = false
 }
 
-/** 点学生姓名 → 跳到统计分析的「个人追踪」并载入该生 */
-async function openTrack() {
+/** 点学生姓名 → 跳到统计分析的「个人追踪」并载入该生；录入现场被 keep-alive 缓存，可随时一键返回 */
+function openTrack() {
   if (!currentStudent.value) return
-  if (currentValue.value) {
-    try {
-      await ElMessageBox.confirm('当前这条成绩还未保存，离开将丢失。仍要查看该生的个人追踪吗？', '确认离开', { type: 'warning' })
-    } catch { return }
-  }
-  router.push({ path: '/admin/statistics', query: { student: currentStudent.value.id } })
+  router.push({ path: '/admin/statistics', query: { student: currentStudent.value.id, from: 'entry' } })
 }
 
 async function onValueChange() {

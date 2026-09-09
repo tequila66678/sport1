@@ -1,6 +1,7 @@
 <template>
   <div class="stats-page">
     <el-button text @click="$router.push('/admin/dashboard')" class="back-btn">← 返回仪表盘</el-button>
+    <button v-if="cameFromEntry" class="return-entry" @click="router.back()">← 返回成绩录入</button>
     <h3 style="margin:8px 0 12px">统计分析</h3>
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
       <el-tab-pane label="年级对比" name="grade">
@@ -205,6 +206,8 @@ import 'echarts'
 const activeTab = ref('grade')
 const route = useRoute()
 const router = useRouter()
+// 从成绩录入页带 from=entry 跳过来时，显示「返回成绩录入」按钮（URL 参数会被消费，这里先记住）
+const cameFromEntry = ref(route.query.from === 'entry')
 const classes = ref([])
 const events = ref([])
 const showExport = ref(false)
@@ -392,6 +395,17 @@ const chartOption = computed(() => {
 
 .back-btn { margin-bottom: 4px; color: var(--text-b); }
 h3 { color: var(--text-a); }
+
+/* 从成绩录入跳过来时的返回按钮，悬浮在页面右上角 */
+.return-entry {
+  position: absolute; top: 16px; right: 24px;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 14px; border-radius: 999px;
+  border: 1px solid var(--cyan); color: var(--cyan);
+  background: rgba(6, 182, 212, 0.10); cursor: pointer;
+  font-size: 13px; font-weight: 600; transition: all 0.2s;
+}
+.return-entry:hover { background: rgba(6, 182, 212, 0.22); }
 
 /* ===== Element Plus overrides ===== */
 .stats-page :deep(.el-tabs__header) { border-bottom-color: var(--border-sub); }
