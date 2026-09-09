@@ -472,6 +472,7 @@ def class_score_table(
     rows = []
     for s in students:
         row = {
+            "id": s.id,
             "student_id": s.student_id,
             "student_name": s.name,
             "gender": s.gender.value,

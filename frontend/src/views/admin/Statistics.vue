@@ -120,9 +120,14 @@
           <!-- Student score matrix table -->
           <div v-if="classScoreTable" class="section-label" style="margin-top:16px">学生成绩明细</div>
           <div v-if="classScoreTable" class="score-table-wrap">
-            <el-table :data="classScoreTable.students" stripe size="small" style="width:100%" border>
+            <el-table :data="classScoreTable.students" stripe size="small" style="width:100%" border
+                      class="matrix-table" @row-click="openStudentTrack">
               <el-table-column prop="student_id" label="学号" width="100" fixed />
-              <el-table-column prop="student_name" label="姓名" width="80" fixed />
+              <el-table-column label="姓名" width="80" fixed>
+                <template #default="{ row }">
+                  <span class="stu-link">{{ row.student_name }}</span>
+                </template>
+              </el-table-column>
               <el-table-column v-for="evt in classScoreTable.events" :key="evt.id" :label="evt.name" min-width="100" align="center">
                 <template #default="{ row }">
                   <span v-if="row.scores[evt.id]" class="cell-score" :class="{ 'cell-best': row.scores[evt.id]?.earned_score >= 9 }">
@@ -132,7 +137,7 @@
                 </template>
               </el-table-column>
             </el-table>
-            <div class="table-hint">* 优先取近一年该项目最好成绩，若一年内未测试则取最近一次成绩</div>
+            <div class="table-hint">* 优先取近一年该项目最好成绩，若一年内未测试则取最近一次成绩 · 点击学生行查看「个人追踪」</div>
           </div>
         </div>
         <div v-else class="empty-hint">请选择班级</div>
@@ -247,6 +252,15 @@ async function loadClassStats() {
   ])
   classStats.value = statsRes.data
   classScoreTable.value = tableRes.data
+}
+
+/** 班级成绩明细里点学生 → 切到「个人追踪」tab 并载入该生 */
+function openStudentTrack(row) {
+  if (!row?.id) return
+  currentStudentId = row.id
+  studentSearch.value = row.student_id
+  activeTab.value = 'student'
+  loadStudentStats()
 }
 
 async function searchStudent() {
@@ -534,4 +548,9 @@ h3 { color: var(--text-a); }
 .cell-best { color: var(--emerald); font-weight: 700; }
 .cell-empty { color: #475569; }
 .table-hint { padding: 8px 16px; font-size: 11px; color: var(--text-c); background: #0f1e35; }
+
+/* Clickable student rows -> personal track */
+.matrix-table :deep(.el-table__body tr) { cursor: pointer; }
+.stu-link { color: var(--cyan); font-weight: 600; }
+.matrix-table :deep(.el-table__body tr:hover .stu-link) { text-decoration: underline; }
 </style>
