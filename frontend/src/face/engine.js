@@ -27,10 +27,19 @@ export function loadEngine() {
     // wasm 仍随构建产物自托管在 /assets/ 下，不依赖外网 CDN。
     // 单线程：多线程需要 SharedArrayBuffer，也就需要 COOP/COEP 响应头，部署侧没配
     ort.env.wasm.numThreads = 1
+    // 注：建会话时 SFace 会刷几十行 "Initializer ... appears in graph inputs" 警告。
+    // 那是 native 层直接输出的，ort.env.logLevel='error' 压不住（实测无效），只能放着。
     enginePromise = Promise.all([
       ort.InferenceSession.create(`${MODEL_BASE}/face_detection_yunet_2023mar.onnx`),
       ort.InferenceSession.create(`${MODEL_BASE}/face_recognition_sface_2021dec.onnx`),
-    ]).then(([det, rec]) => ({ det, rec, recOut: rec.outputNames[0] }))
+    ]).then(([det, rec]) => ({
+      det, rec,
+      // 两个模型的输入名不一样：YuNet 是 'input'，SFace 是 'data'。写死 'input' 会让识别直接抛
+      // "input 'data' is missing in 'feeds'"，故一律从会话里读，不假设。
+      detIn: det.inputNames[0],
+      recIn: rec.inputNames[0],
+      recOut: rec.outputNames[0],
+    }))
       .catch((e) => { enginePromise = null; throw e })
   }
   return enginePromise
@@ -72,7 +81,7 @@ export async function detect(engine, src) {
   const img = ctx.getImageData(0, 0, DETECT_SIZE, DETECT_SIZE)
   const tensor = new ort.Tensor('float32', toNchwFloat(img.data, DETECT_SIZE, 'bgr'),
     [1, 3, DETECT_SIZE, DETECT_SIZE])
-  const out = await engine.det.run({ input: tensor })
+  const out = await engine.det.run({ [engine.detIn]: tensor })
   return decodeYunet(out, SCORE_THRESHOLD, NMS_IOU).map(f => ({
     x: (f.x - dx) / scale,
     y: (f.y - dy) / scale,
@@ -101,7 +110,7 @@ export async function embed(engine, src, landmarks) {
   const img = ctx.getImageData(0, 0, ALIGN_SIZE, ALIGN_SIZE)
   const tensor = new ort.Tensor('float32', toNchwFloat(img.data, ALIGN_SIZE, 'rgb'),
     [1, 3, ALIGN_SIZE, ALIGN_SIZE])
-  const out = await engine.rec.run({ input: tensor })
+  const out = await engine.rec.run({ [engine.recIn]: tensor })
   return l2normalize(out[engine.recOut].data)
 }
 
