@@ -17,14 +17,9 @@ def test_sync_returns_school_scope(env):
     body = r.json()
     assert body["school_id"] == d["school_id"]
     assert len(body["students"]) == 2
-    # 给女生写一条特征，应出现在 face_embeddings
-    from app.database import SessionLocal
-    from app.models import FaceEmbedding
-    import json
-    db = SessionLocal()
-    db.add(FaceEmbedding(student_id=d["stu_f"], embedding=json.dumps([0.0] * 128),
-                         school_id=d["school_id"]))
-    db.commit(); db.close()
+    # 给女生录一条人脸，应出现在 face_embeddings。
+    # 走 PUT /api/faces 而非直插库：下发的是当前 sface 空间的标，直插的行默认 faceapi 会被过滤。
+    client.put(f"/api/faces/{d['stu_f']}", headers=h, json={"embedding": [0.0] * 128})
     r2 = client.get("/api/device/sync", headers=h).json()
     assert any(f["id"] == d["stu_f"] for f in r2["face_embeddings"])
     names = [e["name"] for e in r2["long_run_events"]]

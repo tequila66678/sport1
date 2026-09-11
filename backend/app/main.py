@@ -100,6 +100,18 @@ def startup():
                 conn.execute(text("UPDATE admins SET role = 'super' WHERE is_super = true"))
                 conn.commit()
 
+    # 人脸特征空间迁移：face_embeddings 增加 model 列。
+    # 旧行默认标 'faceapi'（face-api.js 的欧氏空间），新录为 'sface'（YuNet+SFace 余弦空间）。
+    # 两空间不可比，device /sync 只下发 sface；旧行保留在库中但失效，重录即就地覆盖。
+    if "face_embeddings" in table_names:
+        cols = [c["name"] for c in insp.get_columns("face_embeddings")]
+        if "model" not in cols:
+            with engine.connect() as conn:
+                conn.execute(text(
+                    "ALTER TABLE face_embeddings ADD COLUMN model VARCHAR(16) NOT NULL DEFAULT 'faceapi'"))
+                conn.commit()
+                print("migration: added face_embeddings.model（旧特征标记为 faceapi，不再下发）")
+
     # Check and add school_id columns to existing tables
     for tbl, nullable in [("classes", False), ("sport_events", False), ("scores", False), ("admins", True), ("system_config", False)]:
         if tbl in table_names:

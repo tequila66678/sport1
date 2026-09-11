@@ -30,7 +30,12 @@ def device_sync(db: Session = Depends(get_db), current: Admin = Depends(get_scho
     students = db.query(Student).join(Class, Student.class_id == Class.id) \
         .filter(Class.school_id == sid).all()
     students.sort(key=lambda s: (s.class_.name, s.student_id))
-    faces = db.query(FaceEmbedding).filter(FaceEmbedding.school_id == sid).all()
+    # 只下发当前模型空间（sface）的特征：旧 faceapi 特征与 sface 不可比，
+    # 混下到设备会让 rankMatches 在两种度量下乱认人。旧行保留在库中，重录即覆盖。
+    faces = db.query(FaceEmbedding).filter(
+        FaceEmbedding.school_id == sid,
+        FaceEmbedding.model == "sface",
+    ).all()
     face_map = {f.student_id: f for f in faces}
     events = db.query(SportEvent).filter(
         SportEvent.school_id == sid,

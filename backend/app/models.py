@@ -140,5 +140,8 @@ class FaceEmbedding(Base):
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False, unique=True)
     embedding = Column(Text, nullable=False)
     school_id = Column(Integer, ForeignKey("schools.id"), nullable=False)
+    # 特征所用的识别模型：'faceapi'(旧 128 维欧氏空间) | 'sface'(YuNet+SFace 128 维余弦空间)。
+    # 两空间不可比，设备同步只下发 'sface'，旧 faceapi 行保留但失效，重录即覆盖。
+    model = Column(String(16), nullable=False, server_default="faceapi")
     created_at = Column(DateTime, server_default=func.now())
     student = relationship("Student")

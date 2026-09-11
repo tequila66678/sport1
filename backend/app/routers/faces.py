@@ -11,6 +11,11 @@ from ..schemas import FaceEmbeddingOnly, FaceBatchWrite, FaceResult
 
 router = APIRouter(prefix="/api/faces", tags=["faces"])
 
+# 当前识别模型标识：'sface'（YuNet+SFace，128 维余弦空间）。
+# 旧 'faceapi'（128 维欧氏空间）两空间不可比，故入库打标、设备同步按标过滤。
+# 与 frontend/src/faceutil.js 的 FACE_CONFIG.model 必须一致。
+FACE_MODEL = "sface"
+
 
 def _find_student(db: Session, sid: int, student_id: int):
     q = db.query(Student).join(Class, Student.class_id == Class.id).filter(Student.id == student_id)
@@ -24,8 +29,10 @@ def _upsert(db: Session, st: Student, embedding: list[float]):
     payload = json.dumps(embedding)
     if rec:
         rec.embedding = payload
+        rec.model = FACE_MODEL      # 旧 faceapi 行被就地覆盖进新空间，不残留脏特征
     else:
-        db.add(FaceEmbedding(student_id=st.id, embedding=payload, school_id=st.class_.school_id))
+        db.add(FaceEmbedding(student_id=st.id, embedding=payload,
+                             school_id=st.class_.school_id, model=FACE_MODEL))
 
 
 def _require_school_id(current: Admin) -> int:
