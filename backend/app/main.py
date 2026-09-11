@@ -194,7 +194,8 @@ def startup():
 frontend_web = os.path.join(os.path.dirname(__file__), "f2k3m8")
 app.mount("/assets", StaticFiles(directory=os.path.join(frontend_web, "assets")), name="assets")
 
-# Serve face-api.js library + models (loaded by the 体测 device page)
+# Serve face models (loaded by the 体测 device page).
+# onnxruntime-web 的运行时代码在 /assets 里，wasm 由 Vite 带 hash 一并发出，此处不再托管。
 face_web = os.path.join(os.path.dirname(__file__), "face_web")
 app.mount("/face", StaticFiles(directory=face_web), name="face")
 

@@ -28,6 +28,8 @@
       <div class="live-top">
         <div class="timer">{{ timerText }}</div>
         <div class="status">{{ statusText }}<span class="rec-count"> · 已记录 {{ records.length }} 人</span></div>
+        <!-- 现场标定用：余弦相似度（越大越像）。据此定 FACE_CONFIG.threshold，标完可删 -->
+        <div v-if="debugSim" class="debug-sim">{{ debugSim }}</div>
       </div>
       <div class="video-wrap">
         <video ref="video" autoplay playsinline muted></video>
@@ -81,7 +83,7 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import api from '../api'
-import { loadFaceapi, ensureModels, detectOne, bestMatch, rankMatches, verifyStudent, faceQuality, FACE_CONFIG } from '../faceutil'
+import { loadFaceapi, ensureModels, detectOne, bestMatch, rankMatches, verifyStudent, faceQuality, studentSimilarity, FACE_CONFIG } from '../faceutil'
 
 // 识别流程参数（匹配阈值/余量统一在 faceutil FACE_CONFIG，单一来源，防两处漂移）
 const RECOGNITION_FLOW = {
@@ -103,6 +105,14 @@ const video = ref(null); const overlay = ref(null)
 const records = ref([])             // { id, name, class_name, gender, event_id, time, timeMs }
 const timerText = ref('00:00'); const statusText = ref(''); const flashText = ref('')
 const manualId = ref(''); const uploading = ref(false); const messages = ref([])
+const debugSim = ref('')            // 标定读数：当前帧的余弦相似度（越大越像）
+
+// 只显示有限值：候选池为空时相似度是 -Infinity，直接 toFixed 会渲染出 "-Infinity"
+function showSim(sim, secondSim) {
+  if (!Number.isFinite(sim)) { debugSim.value = ''; return }
+  debugSim.value = `相似度 ${sim.toFixed(3)}` +
+    (Number.isFinite(secondSim) ? ` · 次名 ${secondSim.toFixed(3)}` : '')
+}
 const uploadRes = ref({})           // sid -> {ok, raw_value?, earned_score?, reason?}
 let running = false, startMs = 0, displayTimer = null, recTimer = null, faceapi = null, wakeLock = null
 let recordedIds = new Set()
@@ -318,6 +328,7 @@ async function recognizeLoop() {
   // —— 无脸 / 脸太弱：LOCKED 时攒满帧数才释放，防上一人刚记完立刻连记下一位 ——
   //    弱脸也算「离场」，避免有人躲在镜头边缘脸小不动导致锁死
   if (!res || faceQuality(res) < FACE_CONFIG.qualityThreshold) {
+    debugSim.value = ''
     faceState.noFaceFrames++
     faceState.candidateFrames = 0
     if (faceState.phase === 'LOCKED' && faceState.noFaceFrames >= RECOGNITION_FLOW.unlockFrames) unlockStudent()
@@ -330,6 +341,7 @@ async function recognizeLoop() {
   if (faceState.phase === 'LOCKED') {
     if (verifyStudent(res.descriptor, faceState.student)) {
       faceState.verifyFailFrames = 0
+      showSim(studentSimilarity(res.descriptor, faceState.student))
     } else {
       // 连续 1.5s verify 不过 = 本人已离开 / 他人占镜 → 释放，别死锁
       faceState.verifyFailFrames++
@@ -341,6 +353,7 @@ async function recognizeLoop() {
 
   // —— 未锁定：只在「本批未记录」的池子里 Top1/Top2 匹配（已灌注 embedding）——
   const result = rankMatches(res.descriptor, pendingFacePool)
+  showSim(result.bestSimilarity, result.second ? result.secondSimilarity : undefined)
   if (!result.pass) {
     // 是已记录的人又回来 → 明确提示「已记录」，不误报未识别
     faceState.candidateFrames++
@@ -540,6 +553,8 @@ button:disabled { opacity: .4; }
 .live-top { text-align: center; flex: none; line-height: 1.08; }
 .timer { font-size: clamp(56px, 15vh, 150px); font-weight: bold; font-variant-numeric: tabular-nums; color: #4ade80; text-shadow: 0 0 18px rgba(74,222,128,.28); }
 .status { font-size: clamp(12px, 3.2vw, 15px); color: #94a3b8; margin-top: 2px; }
+/* 标定读数：等宽字体避免数字跳动时整行宽度抖动 */
+.debug-sim { font-size: 12px; color: #64748b; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .rec-count { color: #facc15; }
 .video-wrap { flex: none; height: clamp(150px, 30vh, 300px); position: relative; background: #000; border-radius: 12px; overflow: hidden; }
 video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
