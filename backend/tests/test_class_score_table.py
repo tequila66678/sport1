@@ -61,6 +61,34 @@ def test_expired_scores_fall_back_to_most_recent(env):
     assert cell["earned_score"] == 3   # 最近一次，不是历史上最高的 10
 
 
+def test_fallback_skips_zero_scores(env):
+    """最近一次是 0 分时往前找最近一条非 0 的 —— 0 分多是录入手滑，不该拉低班级均分。"""
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    _add_score(d["stu_f"], d["ev800"], d["school_id"], "2'58", 10, days_ago=60)
+    _add_score(d["stu_f"], d["ev800"], d["school_id"], "1", 0, days_ago=40)
+    assert _table_cell(client, h, d, "ev800")["earned_score"] == 10
+
+
+def test_all_zero_scores_still_show(env):
+    """全是 0 分时仍旧显示 0：宁可显示真实的差成绩，也不能让学生从统计里消失。"""
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    _add_score(d["stu_f"], d["ev800"], d["school_id"], "1", 0, days_ago=40)
+    cell = _table_cell(client, h, d, "ev800")
+    assert cell is not None
+    assert cell["earned_score"] == 0
+
+
+def test_zero_inside_window_is_not_skipped(env):
+    """窗口内的 0 分不跳过：那是本月真测出来的结果。"""
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    _add_score(d["stu_f"], d["ev800"], d["school_id"], "2'58", 10, days_ago=60)
+    _add_score(d["stu_f"], d["ev800"], d["school_id"], "1", 0, days_ago=3)
+    assert _table_cell(client, h, d, "ev800")["earned_score"] == 0
+
+
 def test_class_stats_shares_the_table_rule(env):
     """统计卡与成绩表同源：都按「一个月内最好，超期回退最近一次」。
     否则表格里的分数会和上面的平均分/总分预测对不上。"""

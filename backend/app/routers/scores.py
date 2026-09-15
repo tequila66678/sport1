@@ -43,16 +43,26 @@ def _pick_best_or_recent(scores, days=30):
 
     不回退的话，一个多月没测的学生会直接从统计里消失——人数、均分、总分预测全塌。
     「最近一次」显式比较 test_date，不依赖调用方传进来的排序。
+
+    回退时跳过 0 分：库里不少 0 分是录入手滑（如跳绳 raw='1'），
+    让它当「最近一次成绩」显示出来会平白拉低班级均分。但若该生该项目全是 0 分，
+    仍旧显示 0——宁可显示一个真实的差成绩，也不能让他从统计里消失。
+    窗口内的 0 分不跳过：那是本月真测出来的结果，不粉饰。
     Returns dict {(student_id, event_id): Score}"""
     best = _pick_best_in_window(scores, days=days)
-    recent = {}
+    recent = {}        # 最近一次，不限分数（兜底用）
+    recent_valid = {}  # 最近一次非 0 分
     for sc in scores:
         key = (sc.student_id, sc.event_id)
         cur = recent.get(key)
         if cur is None or sc.test_date > cur.test_date:
             recent[key] = sc
+        if sc.earned_score:
+            cur_v = recent_valid.get(key)
+            if cur_v is None or sc.test_date > cur_v.test_date:
+                recent_valid[key] = sc
     for key, sc in recent.items():
-        best.setdefault(key, sc)
+        best.setdefault(key, recent_valid.get(key, sc))
     return best
 
 
