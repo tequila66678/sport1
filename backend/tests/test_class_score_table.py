@@ -89,6 +89,20 @@ def test_zero_inside_window_is_not_skipped(env):
     assert _table_cell(client, h, d, "ev800")["earned_score"] == 0
 
 
+def test_cell_marks_whether_score_is_in_window(env):
+    """每格带 in_window：前端据此把「超期回退」的日期标琥珀色。
+    阈值只在后端算，前端不再自己推一遍「一个月」。"""
+    client, d = env
+    h = auth_headers(d["admin"], d["school_id"])
+    _add_score(d["stu_f"], d["ev800"], d["school_id"], "3'30", 6, days_ago=5)    # 窗口内
+    _add_score(d["stu_f"], d["ev1000"], d["school_id"], "4'00", 3, days_ago=40)  # 超期回退
+    r = client.get("/api/scores/class-score-table", headers=h,
+                   params={"class_id": d["cls_f"]})
+    row = next(x for x in r.json()["students"] if x["id"] == d["stu_f"])
+    assert row["scores"][str(d["ev800"])]["in_window"] is True
+    assert row["scores"][str(d["ev1000"])]["in_window"] is False
+
+
 def test_class_stats_shares_the_table_rule(env):
     """统计卡与成绩表同源：都按「一个月内最好，超期回退最近一次」。
     否则表格里的分数会和上面的平均分/总分预测对不上。"""

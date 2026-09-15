@@ -16,6 +16,11 @@ from collections import defaultdict
 
 router = APIRouter(prefix="/api/scores", tags=["scores"])
 
+# 班级详情的「一个月内」判定天数。窗口与回退都用它，别在调用处裸写 30 ——
+# 裸写过一次，_pick_best_in_window 就悄悄吃了默认的 365。
+RECENT_WINDOW_DAYS = 30
+
+
 def _get_admin_school(current: Admin) -> Optional[int]:
     return require_school(current)
 
@@ -38,7 +43,7 @@ def _pick_best_in_window(scores, days=365):
             best[key] = sc
     return best
 
-def _pick_best_or_recent(scores, days=30):
+def _pick_best_or_recent(scores, days=RECENT_WINDOW_DAYS):
     """同 _pick_best_in_window，但窗口内没有成绩的 (学生, 项目) 回退到「最近一次」。
 
     不回退的话，一个多月没测的学生会直接从统计里消失——人数、均分、总分预测全塌。
@@ -490,6 +495,12 @@ def class_score_table(
 
     # 一个月内最好，超期回退最近一次
     best = _pick_best_or_recent(all_scores)
+    # 哪些格子的成绩是窗口内取到的。前端据此把「超期回退」的日期标出来，
+    # 让老师看得出这一格是本月测的还是几个月前测的。
+    # 阈值只在这里算一次，不让前端拿 test_date 自己再推一遍「一个月」。
+    in_window = _pick_best_in_window(all_scores, days=RECENT_WINDOW_DAYS)
+    # 窗口优先，所以键在 in_window 里 ⟺ 显示的就是窗口内那条
+    window_keys = set(in_window)
 
     # Build matrix
     event_list = [{"id": e.id, "name": e.name} for e in events]
@@ -508,7 +519,8 @@ def class_score_table(
                 row["scores"][str(e.id)] = {
                     "earned_score": sc.earned_score,
                     "raw_value": sc.raw_value,
-                    "test_date": sc.test_date.isoformat()
+                    "test_date": sc.test_date.isoformat(),
+                    "in_window": (s.id, e.id) in window_keys,
                 }
         rows.append(row)
 

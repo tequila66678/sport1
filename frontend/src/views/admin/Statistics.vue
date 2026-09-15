@@ -132,13 +132,17 @@
               <el-table-column v-for="evt in classScoreTable.events" :key="evt.id" :label="evt.name" min-width="100" align="center">
                 <template #default="{ row }">
                   <span v-if="row.scores[evt.id]" class="cell-score" :class="{ 'cell-best': row.scores[evt.id]?.earned_score >= 9 }">
-                    {{ row.scores[evt.id]?.earned_score ?? '-' }}
+                    <span>{{ row.scores[evt.id]?.earned_score ?? '-' }}</span>
+                    <!-- 日期染色而非压暗分数：压暗后会和「无成绩」的灰色 - 撞车，被读成"这项没测" -->
+                    <span class="cell-date" :class="{ 'cell-stale': !row.scores[evt.id].in_window }">
+                      {{ fmtCellDate(row.scores[evt.id].test_date) }}
+                    </span>
                   </span>
                   <span v-else class="cell-empty">-</span>
                 </template>
               </el-table-column>
             </el-table>
-            <div class="table-hint">* 取近一个月该项目最好成绩，若一个月内未测试则取最近一次成绩 · 点击学生行查看「个人追踪」</div>
+            <div class="table-hint">* 取近一个月该项目最好成绩，若一个月内未测试则取最近一次成绩 · <span class="hint-stale">琥珀色日期</span>表示超过一个月，显示的是最近一次成绩 · 点击学生行查看「个人追踪」</div>
           </div>
         </div>
         <div v-else class="empty-hint">请选择班级</div>
@@ -271,6 +275,11 @@ async function loadClassStats() {
   ])
   classStats.value = statsRes.data
   classScoreTable.value = tableRes.data
+}
+
+/** '2026-07-02' → '07-02'：格子里只要月日，配年份反而挤 */
+function fmtCellDate(iso) {
+  return iso ? iso.slice(5) : ''
 }
 
 /** 班级成绩明细里点学生 → 切到「个人追踪」tab 并载入该生 */
@@ -574,9 +583,12 @@ h3 { color: var(--text-a); }
 .score-table-wrap :deep(.el-table tr) { background: transparent; }
 .score-table-wrap :deep(.el-table--striped .el-table__body tr.el-table__row--striped td) { background: rgba(255,255,255,0.015); }
 .score-table-wrap :deep(.el-table__body tr:hover td) { background: var(--bg-hover) !important; }
-.cell-score { font-weight: 600; color: var(--text-a); }
+.cell-score { display: inline-flex; flex-direction: column; align-items: center; line-height: 1.25; font-weight: 600; color: var(--text-a); }
 .cell-best { color: var(--emerald); font-weight: 700; }
+.cell-date { font-size: 10px; font-weight: 400; color: var(--text-c); font-variant-numeric: tabular-nums; }
+.cell-stale { color: var(--amber); font-weight: 700; }
 .cell-empty { color: #475569; }
+.hint-stale { color: var(--amber); font-weight: 600; }
 .table-hint { padding: 8px 16px; font-size: 11px; color: var(--text-c); background: #0f1e35; }
 
 /* Clickable student rows -> personal track */
