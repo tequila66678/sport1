@@ -47,6 +47,8 @@ def device_sync(db: Session = Depends(get_db), current: Admin = Depends(get_scho
         students=[
             StudentSync(id=s.id, student_id=s.student_id, name=s.name,
                         gender=s.gender.value if s.gender else "",
+                        class_id=s.class_id,
+                        class_grade=s.class_.grade,
                         class_name=s.class_.name)
             for s in students
         ],

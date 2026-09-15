@@ -17,6 +17,11 @@ def test_sync_returns_school_scope(env):
     body = r.json()
     assert body["school_id"] == d["school_id"]
     assert len(body["students"]) == 2
+    # 设备端要能「按班选测」，所以每个学生必须带 class_id 与 class_grade：
+    # class_name 同校会重名（如 2027届3班 / 2028届3班），既不能当分组键，也没法在下拉框里区分。
+    by_id = {s["id"]: s for s in body["students"]}
+    assert all(s["class_id"] is not None and s["class_grade"] for s in body["students"])
+    assert by_id[d["stu_f"]]["class_id"] != by_id[d["stu_m"]]["class_id"]
     # 给女生录一条人脸，应出现在 face_embeddings。
     # 走 PUT /api/faces 而非直插库：下发的是当前 sface 空间的标，直插的行默认 faceapi 会被过滤。
     client.put(f"/api/faces/{d['stu_f']}", headers=h, json={"embedding": [0.0] * 128})

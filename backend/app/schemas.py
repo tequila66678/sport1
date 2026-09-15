@@ -263,6 +263,8 @@ class StudentSync(BaseModel):
     student_id: str
     name: str
     gender: str
+    class_id: Optional[int] = None
+    class_grade: Optional[str] = None
     class_name: Optional[str] = None
 
 

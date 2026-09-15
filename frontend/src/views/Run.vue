@@ -16,9 +16,16 @@
     <div v-else-if="mode === 'ready'" class="center">
       <div class="card">
         <h2>🏃 {{ schoolName }}</h2>
-        <p class="sub">长跑体测 · 已录入 {{ faces.length }} / {{ students.length }} 人</p>
-        <p class="hint">识别后自动区分项目：<b class="mk">男生 → 1000 米</b> · <b class="fk">女生 → 800 米</b><br>识别到即直接记入对应项目成绩</p>
-        <button class="big primary" @click="startBatch">▶ 开始批次</button>
+        <select v-model.number="testClassId" class="big-select" @change="onClassChange">
+          <option :value="0" disabled>请选择测试班级…</option>
+          <option v-for="c in classList" :key="c.id" :value="c.id">
+            {{ c.name }} · {{ c.total }}人 · 已录脸 {{ c.enrolled }}
+          </option>
+        </select>
+        <p v-if="!classList.length" class="err">名单里没有班级信息，请点下方「刷新名单」重新同步</p>
+        <p class="sub">本班已录入 {{ scoped.enrolled }} / {{ scoped.total }} 人</p>
+        <p class="hint">识别只在<b>所选班级</b>内比对：<b class="mk">男生 → 1000 米</b> · <b class="fk">女生 → 800 米</b><br>识别到即直接记入对应项目成绩</p>
+        <button class="big primary" @click="startBatch" :disabled="!testClassId">▶ 开始批次</button>
         <button class="ghost" @click="refreshSync">刷新名单</button>
       </div>
     </div>
@@ -95,12 +102,16 @@ const RECOGNITION_FLOW = {
 }
 const SYNC_KEY = 'run_sync_cache_v1'
 const BATCH_KEY = 'run_batch_v1'
+const TEST_CLASS_KEY = 'run_test_class_v1'
 
 const authed = ref(!!localStorage.getItem('admin_token'))
 const user = ref(''); const pass = ref(''); const loggingIn = ref(false); const loginErr = ref('')
 const schoolName = ref(''); const events = ref([]); const students = ref([]); const faces = ref([])
 const schoolId = ref('')
 const mode = ref('ready')           // ready | running | review
+// 本批要测的班级（0 = 未选）。存本机，设备重开还停在这个班。
+// 识别候选池只灌本班 —— 全校比对时别人抢票是误认的主要来源。
+const testClassId = ref(Number(localStorage.getItem(TEST_CLASS_KEY)) || 0)
 const video = ref(null); const overlay = ref(null)
 const records = ref([])             // { id, name, class_name, gender, event_id, time, timeMs }
 const timerText = ref('00:00'); const statusText = ref(''); const flashText = ref('')
@@ -128,18 +139,21 @@ const faceState = reactive({
   candidateFrames: 0,      // 人脸在但匹配不上，连续轮数
 })
 
-// 识别候选池：只取「有向量」的学生，按本批是否已记录拆成 pending / recorded 两池。
-// 池依赖 students/faces/recordedIds，仅在 applySync/startBatch/recordOne/removeRecord/resetBatch 时重建，
+// 识别候选池：只取「本班 + 有向量」的学生，按本批是否已记录拆成 pending / recorded 两池。
+// 池依赖 students/faces/recordedIds/testClassId，仅在
+// applySync/startBatch/recordOne/removeRecord/resetBatch/onClassChange 时重建，
 // 避免识别循环里每帧 O(n) filter+map。学生对象本身不带向量，此处直接灌注 embedding。
 let allFacePool = []
 let pendingFacePool = []
 let recordedFacePool = []
 function rebuildFacePools() {
+  const cid = testClassId.value
   allFacePool = students.value
     .filter(s => embeddingById.value.has(s.id))
+    .filter(s => !cid || s.class_id === cid)
     .map(s => ({
       id: s.id, student_id: s.student_id, name: s.name, gender: s.gender,
-      class_name: s.class_name || '', embedding: embeddingById.value.get(s.id),
+      class_name: classLabel(s), embedding: embeddingById.value.get(s.id),
     }))
   pendingFacePool = []
   recordedFacePool = []
@@ -181,6 +195,42 @@ function unlockStudent() {
 const studentsById = computed(() => new Map(students.value.map(s => [s.id, s])))
 const studentsByNo = computed(() => new Map(students.value.map(s => [s.student_id, s])))
 const embeddingById = computed(() => new Map(faces.value.map(f => [f.id, f.embedding])))
+
+// 班级显示名：grade + name。只显示 class_name 是不够的 —— 同校确实存在
+// 「2027届3班」和「2028届3班」这种同名班（已被真实数据证实），光看「3班」分不清选哪个。
+// grade 允许为空（老数据），为空时就只用 name。
+function classLabel(s) {
+  return `${s.class_grade || ''}${s.class_name || ''}` || `班级${s.class_id}`
+}
+
+// 班级列表：以 class_id 去重（同校允许重名班，用 id 才稳），显示用 classLabel。
+// 顺带算出每班总人数与已录脸人数，供下拉框选班时判断这班能不能测。
+const classList = computed(() => {
+  const m = new Map()
+  for (const s of students.value) {
+    if (s.class_id == null) continue
+    let c = m.get(s.class_id)
+    if (!c) {
+      c = { id: s.class_id, name: classLabel(s), total: 0, enrolled: 0 }
+      m.set(s.class_id, c)
+    }
+    c.total++
+    if (embeddingById.value.has(s.id)) c.enrolled++
+  }
+  return [...m.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh'))
+})
+
+// 待开始页的人数只统计本班：显示全校人数会让人误以为要测全校
+const scoped = computed(() => {
+  if (!testClassId.value) return { total: 0, enrolled: 0 }
+  const c = classList.value.find(x => x.id === testClassId.value)
+  return { total: c ? c.total : 0, enrolled: c ? c.enrolled : 0 }
+})
+
+function onClassChange() {
+  try { localStorage.setItem(TEST_CLASS_KEY, String(testClassId.value)) } catch (e) {}
+  rebuildFacePools()      // 换了班，候选池必须立刻跟着换
+}
 
 // 按性别挑项目：男生→1000米、女生→800米（从本校正的长跑项目里选匹配项）
 function pickEvent(gender) {
@@ -267,6 +317,12 @@ function applySync(data) {
   events.value = data.long_run_events || []
   students.value = data.students || []
   faces.value = data.face_embeddings || []
+  // 本机存的班级可能已被删除或学生已全部转班：选中的班不在名单里就清掉，
+  // 否则会停在一个空班上，识别永远匹配不到人却看不出原因。
+  if (testClassId.value && !students.value.some(s => s.class_id === testClassId.value)) {
+    testClassId.value = 0
+    try { localStorage.removeItem(TEST_CLASS_KEY) } catch (e) {}
+  }
   rebuildFacePools()
 }
 
@@ -276,6 +332,7 @@ function stopCamera() {
 }
 
 async function startBatch() {
+  if (!testClassId.value) { alert('请先选择测试班级'); return }
   running = true; records.value = []; recordedIds = new Set(); messages.value = []; uploadRes.value = {}
   unlockStudent()
   rebuildFacePools()      // recordedIds 已清空，池子必须回落到「全员可识别」，否则上批已记录者本批永远匹配不上
@@ -402,7 +459,7 @@ function recordOne(s, elapsedMs) {
   if (!ev) return false
   recordedIds.add(s.id)
   records.value.push({
-    id: s.id, name: s.name, class_name: s.class_name || '', gender: s.gender,
+    id: s.id, name: s.name, class_name: classLabel(s), gender: s.gender,
     event_id: ev.id, time: fmt(elapsedMs), timeMs: Math.round(elapsedMs),
   })
   rebuildFacePools()      // 该生移入 recordedFacePool，下帧起不会重复进入 pending 被再次识别
@@ -422,7 +479,10 @@ function manualRecord() {
     // 手动纠错成功 → 状态机归位，机器立即可接下一位（不必等 LOCKED 的 1.5s verify 超时）。
     // recordedIds 仍挡住重复；该生若有向量又回镜头，走「已记录」提示。
     unlockStudent()
-    flashNow(`✅ 手动 ${s.name} · ${fmt(elapsed)}`, true)
+    // 手输是全校可查的兜底（识别不到时才用）。跨班录入时把班级名亮出来，
+    // 免得串了班的学生成绩无声混进本批成绩单。
+    const cross = testClassId.value && s.class_id !== testClassId.value
+    flashNow(`✅ 手动 ${s.name}${cross ? `（${classLabel(s)}）` : ''} · ${fmt(elapsed)}`, true)
   } else {
     flashNow('⚠️ 该生无 800/1000 项目，无法记录')
   }
