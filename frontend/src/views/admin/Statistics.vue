@@ -138,7 +138,7 @@
                 </template>
               </el-table-column>
             </el-table>
-            <div class="table-hint">* 优先取近一年该项目最好成绩，若一年内未测试则取最近一次成绩 · 点击学生行查看「个人追踪」</div>
+            <div class="table-hint">* 取近一个月该项目最好成绩，若一个月内未测试则取最近一次成绩 · 点击学生行查看「个人追踪」</div>
           </div>
         </div>
         <div v-else class="empty-hint">请选择班级</div>

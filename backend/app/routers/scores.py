@@ -38,6 +38,24 @@ def _pick_best_in_window(scores, days=365):
             best[key] = sc
     return best
 
+def _pick_best_or_recent(scores, days=30):
+    """同 _pick_best_in_window，但窗口内没有成绩的 (学生, 项目) 回退到「最近一次」。
+
+    不回退的话，一个多月没测的学生会直接从统计里消失——人数、均分、总分预测全塌。
+    「最近一次」显式比较 test_date，不依赖调用方传进来的排序。
+    Returns dict {(student_id, event_id): Score}"""
+    best = _pick_best_in_window(scores, days=days)
+    recent = {}
+    for sc in scores:
+        key = (sc.student_id, sc.event_id)
+        cur = recent.get(key)
+        if cur is None or sc.test_date > cur.test_date:
+            recent[key] = sc
+    for key, sc in recent.items():
+        best.setdefault(key, sc)
+    return best
+
+
 def _pick_best_in_window_as_of(scores, as_of_date: date, days=30):
     """Same as _pick_best_in_window but uses a custom reference date (for trend calculation)."""
     cutoff = as_of_date - timedelta(days=days)
@@ -362,7 +380,9 @@ def class_stats(
         scores_q = scores_q.filter(Score.event_id.in_(event_id_list))
 
     all_scores = scores_q.order_by(Score.test_date.desc()).all()
-    best = _pick_best_in_window(all_scores)
+    # 一个月内的最好成绩，超期则回退最近一次 —— 与下方成绩表同一规则，
+    # 否则表格里的分数会和这里的平均分/中考总分预测对不上。
+    best = _pick_best_or_recent(all_scores)
 
     events = _maybe_filter(db.query(SportEvent), SportEvent, sid).order_by(SportEvent.sort_order).all()
     # 必考项：长跑 800/1000 米（从全校全部项目中识别，不受 event_ids 筛选影响）
@@ -458,14 +478,8 @@ def class_score_table(
     student_ids = [s.id for s in students]
     all_scores = db.query(Score).filter(Score.student_id.in_(student_ids)).order_by(Score.test_date.desc()).all()
 
-    # Best in 30 days (global, shared logic)
-    best_30d = _pick_best_in_window(all_scores)
-
-    # Group scores by (student_id, event_id)
-    from collections import defaultdict as _dd
-    score_map = _dd(list)
-    for sc in all_scores:
-        score_map[(sc.student_id, sc.event_id)].append(sc)
+    # 一个月内最好，超期回退最近一次
+    best = _pick_best_or_recent(all_scores)
 
     # Build matrix
     event_list = [{"id": e.id, "name": e.name} for e in events]
@@ -479,21 +493,12 @@ def class_score_table(
             "scores": {}
         }
         for e in events:
-            key = (s.id, e.id)
-            # Priority: best in 30 days, else most recent
-            best = best_30d.get(key)
-            if best:
+            sc = best.get((s.id, e.id))
+            if sc:
                 row["scores"][str(e.id)] = {
-                    "earned_score": best.earned_score,
-                    "raw_value": best.raw_value,
-                    "test_date": best.test_date.isoformat()
-                }
-            elif key in score_map:
-                recent = score_map[key][0]  # most recent (sorted desc)
-                row["scores"][str(e.id)] = {
-                    "earned_score": recent.earned_score,
-                    "raw_value": recent.raw_value,
-                    "test_date": recent.test_date.isoformat()
+                    "earned_score": sc.earned_score,
+                    "raw_value": sc.raw_value,
+                    "test_date": sc.test_date.isoformat()
                 }
         rows.append(row)
 
